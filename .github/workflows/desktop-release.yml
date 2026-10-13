@@ -1,0 +1,83 @@
+name: Desktop releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.platform }}
+    env:
+      NEXT_PUBLIC_CAMEL_ACCOUNTS_URL: ${{ vars.NEXT_PUBLIC_CAMEL_ACCOUNTS_URL || 'https://accounts.camelcreatives.com' }}
+      NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID: ${{ vars.NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID || 'simamia-35sj96' }}
+      NEXT_PUBLIC_SIMAMIA_API_URL: http://127.0.0.1:8080/api/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils file
+
+      - name: Install Windows C compiler for SQLite
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: Add MinGW to PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build API sidecar
+        run: node scripts/desktop.mjs build-api --target ${{ matrix.target }}
+
+      - name: Build and draft GitHub release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Simamia ${{ github.ref_name }}
+          releaseBody: |
+            Install the Simamia desktop app for your platform. The desktop app keeps the existing Simamia interface and stores local data in your user application-data directory.
+
+            Desktop sign-in requires the Camel Accounts OAuth client to allow the Tauri callback URLs documented in the repository README.
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }}
