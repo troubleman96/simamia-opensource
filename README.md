@@ -54,7 +54,7 @@ Templates currently tailor labels, statuses, intake fields, and example services
 
 The same Next.js interface is used in three ways; desktop packaging does not replace or restyle the browser app:
 
-- **Desktop:** Wails embeds the same static frontend and serves the Go API in-process for Windows, macOS, and Linux. The local workspace is stored in SQLite under the operating system's per-user configuration directory and is usable without internet access.
+- **Desktop:** Wails embeds the same static frontend and serves the Go API in-process for Windows, macOS, and Linux. The local workspace is stored in SQLite under the operating system's per-user configuration directory and is usable without internet access. Download Linux x64, Windows x64, or universal macOS packages from [GitHub Releases](https://github.com/troubleman96/simamia-opensource/releases); see the [desktop installation instructions](docs/desktop-and-web-distribution.md#install-a-prebuilt-desktop-release).
 - **Browser/static hosting:** `bun run build` exports the browser app to `out/`, which can be hosted by any static web server. Set the public Camel Accounts and API URL values at build time.
 - **Self-hosted Docker:** `docker compose up --build` serves the static app and API with the existing production-style stack.
 

@@ -12,6 +12,40 @@ The Wails v2 desktop app bundles the static UI and mounts the existing Go API ha
 
 The desktop build uses a local-only workspace identity and SQLite persistence. The visible dashboard and business onboarding use the same React components and styles as the browser app. The desktop does not authenticate against Camel Accounts and does not synchronize its local records with the web app or other devices. Keep a file-level backup of the SQLite database before moving, reinstalling, or replacing a device.
 
+### Install a prebuilt desktop release
+
+Open the repository's [GitHub Releases](https://github.com/troubleman96/simamia-opensource/releases) page (you need access to this private repository) and download the package for your computer:
+
+- **Linux x86-64:** `simamia-linux-amd64.tar.gz`
+- **Windows x86-64:** `simamia-windows-amd64.zip`
+- **macOS (Intel and Apple Silicon):** `simamia-macos-universal.zip`
+
+#### Linux
+
+The computer needs GTK 3 and WebKitGTK 4.1 runtime libraries. Extract the archive, mark the executable as runnable, and start it:
+
+```sh
+tar -xzf simamia-linux-amd64.tar.gz
+chmod +x simamia-desktop
+./simamia-desktop
+```
+
+If the app reports a missing shared library, install the GTK 3 or WebKitGTK 4.1 runtime package provided by your Linux distribution and try again.
+
+#### Windows
+
+Extract the ZIP file, then launch `simamia-desktop.exe`. The Microsoft Edge WebView2 Runtime is required; install the Evergreen Runtime from Microsoft if it is missing.
+
+#### macOS
+
+Extract the ZIP file, then move `Simamia Desktop.app` to Applications and open it. The archive supports both Intel and Apple Silicon Macs.
+
+These desktop builds are unsigned, so Windows SmartScreen or macOS Gatekeeper may show a security warning. Only run software you trust and downloaded from the repository.
+
+#### Updating
+
+Quit Simamia before replacing it with a newer release. Your SQLite workspace remains in your operating system's per-user configuration directory, but make a backup of `simamia.db` before updating or moving to another computer. Desktop records are local to that computer and do not sync with the browser app or other devices.
+
 ### Online-only boundaries
 
 Browser and Docker builds continue to use Camel Accounts OAuth and the existing remote API configuration. On desktop, internet-only operations are not needed to open the UI or create, read, update, and delete local business records. Cross-device sync, Camel account registration/recovery, Google sign-in, and future SMS, email, AI-provider, and mobile-money integrations require network connectivity and are not provided by this local workspace. The operational payments screens remain ledger entries, not payment processing. Local desktop records are protected by the OS user account; the app currently has no additional password, encryption, or multi-user access-control layer.
