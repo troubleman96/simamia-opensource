@@ -1,0 +1,15 @@
+{
+  "version": "2",
+  "name": "Simamia Desktop",
+  "assetdir": "frontend/out",
+  "build:dir": "build",
+  "build:tags": "webkit2_41",
+  "frontend:dir": "frontend",
+  "outputfilename": "simamia-desktop",
+  "info": {
+    "companyName": "Simamia",
+    "productName": "Simamia",
+    "productVersion": "1.0.0",
+    "comments": "Offline-first Simamia desktop app powered by Wails"
+  }
+}

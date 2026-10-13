@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,13 +29,17 @@ type Store struct {
 	db       *sql.DB
 }
 type API struct {
-	store       *Store
-	accountsURL string
-	startedAt   time.Time
+	store            *Store
+	accountsURL      string
+	startedAt        time.Time
+	desktopLocalAuth bool
 }
 type ownerSubContextKey struct{}
 
 func (a *API) authenticate(w http.ResponseWriter, r *http.Request, requestID string) (string, bool) {
+	if a.desktopLocalAuth {
+		return "local-preview", true
+	}
 	if a.store.db == nil {
 		return "local-preview", true
 	}
@@ -713,51 +716,27 @@ func (a *API) methodNotAllowed(w http.ResponseWriter, r *http.Request, rid, allo
 	w.Header().Set("Allow", allow)
 	a.fail(w, r, rid, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Method not allowed", Record{"allow": allow})
 }
-func main() {
-	level := new(slog.LevelVar)
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
-	case "debug":
-		level.Set(slog.LevelDebug)
-	case "warn", "warning":
-		level.Set(slog.LevelWarn)
-	case "error":
-		level.Set(slog.LevelError)
-	default:
-		level.Set(slog.LevelInfo)
-	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	databasePath := os.Getenv("SIMAMIA_DB_PATH")
-	if databasePath == "" {
-		databasePath = os.Getenv("HUDUMADESK_DB_PATH") // Backward compatibility for existing deployments.
-	}
-	if databasePath == "" {
-		databasePath = "data/simamia.db"
-		if _, err := os.Stat(databasePath); errors.Is(err, os.ErrNotExist) {
-			if _, legacyErr := os.Stat("data/hudumadesk.db"); legacyErr == nil {
-				databasePath = "data/hudumadesk.db"
-			}
-		}
-	}
+func newHTTPHandler(databasePath, accountsURL string, desktopLocalAuth bool) (http.Handler, func() error, error) {
 	store, err := OpenStore(databasePath)
 	if err != nil {
-		slog.Error("startup_failed", "component", "storage", "error", err)
-		os.Exit(1)
+		return nil, nil, err
 	}
-	defer store.db.Close()
-	api := &API{store: store, accountsURL: os.Getenv("CAMEL_ACCOUNTS_URL"), startedAt: time.Now()}
-	listenAddress := strings.TrimSpace(os.Getenv("SIMAMIA_LISTEN_ADDRESS"))
-	if listenAddress == "" {
-		listenAddress = "0.0.0.0"
+	service := &API{
+		store:            store,
+		accountsURL:      accountsURL,
+		startedAt:        time.Now(),
+		desktopLocalAuth: desktopLocalAuth,
 	}
-	srv := &http.Server{Addr: net.JoinHostPort(listenAddress, port), Handler: api, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
-	slog.Info("service_started", "service", "simamia-api", "address", srv.Addr, "database", databasePath)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("service_stopped_unexpectedly", "error", err)
-		os.Exit(1)
-	}
+	return service, store.db.Close, nil
+}
+
+// NewHTTPHandler opens the persistent API store and enforces Camel Accounts auth.
+func NewHTTPHandler(databasePath, accountsURL string) (http.Handler, func() error, error) {
+	return newHTTPHandler(databasePath, accountsURL, false)
+}
+
+// NewDesktopHTTPHandler opens the local desktop store without an online identity provider.
+// The returned handler is intended to be mounted only inside the Wails asset server.
+func NewDesktopHTTPHandler(databasePath string) (http.Handler, func() error, error) {
+	return newHTTPHandler(databasePath, "", true)
 }

@@ -85,7 +85,7 @@ API:
 
 ```bash
 cd api
-go run .
+go run ./cmd/simamia-api
 ```
 
 The admin and API docs are standalone apps in this repository. Start either from its project directory:

@@ -19,9 +19,11 @@ pnpm-lock.yaml
 # production
 /build
 /api/data/
-/src-tauri/target/
-/src-tauri/binaries/*
-/src-tauri/gen/schemas/
+/desktop/build/bin/
+/desktop/frontend/out/*
+!/desktop/frontend/out/.gitkeep
+/desktop/wailsjs/
+/desktop/frontend/wailsjs/
 
 # misc
 .DS_Store

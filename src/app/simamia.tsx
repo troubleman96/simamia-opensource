@@ -141,6 +141,7 @@ const API_BASE_URL = (
   process.env.NEXT_PUBLIC_HUDUMADESK_API_URL ||
   'http://127.0.0.1:8080/api/v1'
 ).replace(/\/+$/, '');
+const DESKTOP_LOCAL_MODE = process.env.NEXT_PUBLIC_SIMAMIA_DESKTOP === 'true';
 
 function readWorkspaceCache(kind: 'prefs' | 'demo', accountKey: string): string | null {
   const currentKey = `simamia-${kind}:${accountKey}`;
@@ -1540,9 +1541,13 @@ export default function Simamia() {
                 }
               />
               {apiConnected
-                ? lang === 'sw'
-                  ? 'API'
-                  : 'Shared API'
+                ? DESKTOP_LOCAL_MODE
+                  ? lang === 'sw'
+                    ? 'Kifaa chako'
+                    : 'This device'
+                  : lang === 'sw'
+                    ? 'API'
+                    : 'Shared API'
                 : lang === 'sw'
                   ? 'Onyesho la kifaa'
                   : 'Local preview'}

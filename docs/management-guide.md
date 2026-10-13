@@ -60,9 +60,9 @@ Camel Accounts authenticates users and the API scopes data to each authenticated
 
 ## 6. Preview data and reliability
 
-The frontend requires Camel Accounts sign-in. The dashboard calls the Go API when available and falls back to browser-local demo data if the API cannot be reached. Browser-local data is not a shared or backed-up workspace.
+The browser frontend requires Camel Accounts sign-in. The dashboard calls the Go API when available and falls back to browser-local demo data if the API cannot be reached. The Wails desktop build opens a device-local workspace and persists records to its per-user SQLite database without Camel Accounts. Desktop data is not shared with the browser or other devices and should be backed up separately.
 
-The Go API in `api/` validates bearer tokens through Camel Accounts userinfo and scopes records by account subject. Run it using `cd api && go run .`; SQLite data persists across restarts. Configure `CAMEL_ACCOUNTS_URL` for the API and `NEXT_PUBLIC_SIMAMIA_API_URL` for the frontend. Expenses are separate records; order payment amounts remain aggregates, not an immutable payment event ledger. The API has no business membership model, staff roles, backups, rate limit, payment gateway or message delivery. Apply the Simamia OAuth client migration in Camel Accounts before account signup is enabled.
+The standalone Go API in `api/` validates bearer tokens through Camel Accounts userinfo and scopes records by account subject. Run it using `cd api && go run ./cmd/simamia-api`; SQLite data persists across restarts. Configure `CAMEL_ACCOUNTS_URL` for the API and `NEXT_PUBLIC_SIMAMIA_API_URL` for the frontend. The Wails-only handler runs in-process and is not exposed as an unauthenticated network service. Expenses are separate records; order payment amounts remain aggregates, not an immutable payment event ledger. The API has no business membership model, staff roles, backups, rate limit, payment gateway or message delivery. Apply the Simamia OAuth client migration in Camel Accounts before account signup is enabled.
 
 ## 7. Production readiness checklist
 

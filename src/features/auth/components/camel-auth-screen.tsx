@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CamelAuthProvider, useCamelAuth } from 'camel-accounts';
+import { CamelAuthProvider, useCamelAuth, type AuthContextValue } from 'camel-accounts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
@@ -9,8 +9,30 @@ import { logClientAuditEvent, logClientEvent } from '@/lib/observability';
 
 const issuer = process.env.NEXT_PUBLIC_CAMEL_ACCOUNTS_URL || 'https://accounts.camelcreatives.com';
 const clientId = process.env.NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID || 'simamia-35sj96';
+const desktopLocalMode = process.env.NEXT_PUBLIC_SIMAMIA_DESKTOP === 'true';
+
+const desktopLocalAuth: AuthContextValue = {
+  tokens: null,
+  user: { sub: 'local-preview', name: 'Simamia local workspace' },
+  loading: false,
+  authenticated: true,
+  login: () => {},
+  logout: () => {},
+  getAccessToken: () => 'desktop-local'
+};
+
+function useDesktopLocalAuth(): AuthContextValue {
+  return desktopLocalAuth;
+}
+
+export const useSimamiaAuth = desktopLocalMode ? useDesktopLocalAuth : useCamelAuth;
 
 export function CamelAuthRoot({ children }: { children: React.ReactNode }) {
+  if (desktopLocalMode) return <>{children}</>;
+  return <CamelOAuthRoot>{children}</CamelOAuthRoot>;
+}
+
+function CamelOAuthRoot({ children }: { children: React.ReactNode }) {
   const [providerKey, setProviderKey] = useState(0);
   const [storageReady, setStorageReady] = useState(false);
 
@@ -139,10 +161,6 @@ export function CamelAuthRoot({ children }: { children: React.ReactNode }) {
       {children}
     </CamelAuthProvider>
   );
-}
-
-export function useSimamiaAuth() {
-  return useCamelAuth();
 }
 
 export function CamelAuthScreen({ lang = 'sw' }: { lang?: 'sw' | 'en' }) {

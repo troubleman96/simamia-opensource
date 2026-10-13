@@ -32,6 +32,11 @@ function AuthenticatedAnalyticsIdentity({ ready }: { ready: boolean }) {
 }
 
 export function SimamiaAnalytics() {
+  if (process.env.NEXT_PUBLIC_SIMAMIA_DESKTOP === 'true') return null;
+  return <CamelAnalytics />;
+}
+
+function CamelAnalytics() {
   const [trackerReady, setTrackerReady] = useState(false);
 
   return (

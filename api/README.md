@@ -7,7 +7,7 @@ The API is a Go HTTP service for Simamia's operational data. Its versioned base 
 Requirements: Go version declared by `go.mod` and a C compiler for the SQLite driver.
 
 ```bash
-go run .
+go run ./cmd/simamia-api
 ```
 
 The API listens on `0.0.0.0:8080` by default. Set `PORT` to change the port. Health check:
@@ -15,6 +15,8 @@ The API listens on `0.0.0.0:8080` by default. Set `PORT` to change the port. Hea
 ```bash
 curl http://localhost:8080/api/v1/health
 ```
+
+The Wails desktop app uses the same API package through an in-process handler, but opens a per-user SQLite database and assigns the local device workspace without calling Camel Accounts. That handler is mounted only inside Wails and is not exposed as a network server; ordinary API servers continue to require Camel Accounts bearer tokens.
 
 The default SQLite file is `data/simamia.db` relative to the API process working directory. Override it with `SIMAMIA_DB_PATH=/path/to/simamia.db`. Keep the database outside version control and back it up before upgrades.
 

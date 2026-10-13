@@ -4,7 +4,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o /out/simamia-api .
+RUN CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o /out/simamia-api ./cmd/simamia-api
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates sqlite \

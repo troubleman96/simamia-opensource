@@ -2,7 +2,7 @@
 
 ## Live test instance
 
-The UI defaults to `http://localhost:8080/api/v1` (override with `NEXT_PUBLIC_SIMAMIA_API_URL`). When reachable, the dashboard loads and edits business, order, customer, service, team and expense records through the Go API's SQLite store. Data routes require a Camel Accounts access token and are scoped to its subject. If the API cannot be reached during initial load, the UI falls back to browser-local sample data. SMS, email, mobile money processing and AI provider calls remain unimplemented.
+The browser UI defaults to `http://localhost:8080/api/v1` (override with `NEXT_PUBLIC_SIMAMIA_API_URL`). When reachable, the dashboard loads and edits business, order, customer, service, team and expense records through the Go API's SQLite store. Browser data routes require a Camel Accounts access token and are scoped to its subject. If the API cannot be reached during initial load, the browser UI falls back to browser-local sample data. The Wails desktop build uses the same screens with a device-local workspace and persistent SQLite database, without requiring Camel Accounts or an internet connection for local record operations. Desktop data does not sync to the browser. SMS, email, mobile money processing and AI provider calls remain unimplemented.
 
 **Data model:** SQLite state persists across API restarts in `api/data/simamia.db`. The API checks Camel Accounts userinfo before serving data routes; `/health` is public. Existing rows without an owner are not assigned to a user. Payments remain a read-only balance ledger derived from order totals; there is no payment processing.
 
@@ -13,7 +13,7 @@ Start the API in one terminal:
 ```bash
 cd api
 go test ./...
-go run .
+go run ./cmd/simamia-api
 ```
 
 Start the UI in another terminal:

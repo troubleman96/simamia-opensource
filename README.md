@@ -1,6 +1,6 @@
 # Simamia
 
-Simamia is a Swahili-first business operations platform for small service and retail businesses. It combines a public website, a browser app, and a Go API in one repository. Owners sign in with Camel Accounts, create a Simamia business profile, and choose a workflow template.
+Simamia is a Swahili-first business operations platform for small service and retail businesses. It combines a public website, a browser app, a Wails desktop app, and a Go API in one repository. Browser users sign in with Camel Accounts; desktop users can work in a local device workspace.
 
 ## Repository map
 
@@ -10,7 +10,7 @@ Simamia is a Swahili-first business operations platform for small service and re
 | `src/features/onboarding/business-templates.ts` | Eight workflow templates and their labels, statuses, intake fields, and sample services |
 | `landing/` | Public `simamia.online` website (plain HTML, CSS, and JavaScript) |
 | `api/` | Go HTTP API, SQLite persistence, and OpenAPI contract |
-| `src-tauri/` | Cross-platform Tauri desktop shell; bundles the static app and local Go API |
+| `desktop/` | Cross-platform Wails desktop shell; embeds the static app and local Go API |
 | `admin/` | Private Next.js operator console for tenant data, usage, and audit history (`admin.simamia.online`) |
 | `docs-site/` | Next.js API documentation site (`docs.simamia.online`) |
 | `deploy/` | Caddy and host-Nginx configuration for production routing |
@@ -34,10 +34,10 @@ Templates currently tailor labels, statuses, intake fields, and example services
 
 ## Current product boundaries
 
-- Sign-in is handled by Camel Accounts. Simamia stores its own business profile after authentication.
-- The Go API validates Camel Accounts access tokens and scopes stored records to the token subject.
-- The API persists businesses, orders, customers, services, team records, and expenses in SQLite. Its default local database is `api/data/simamia.db`.
-- Some dashboard data can fall back to fabricated browser-local demo records when the API is unavailable. Do not treat demo values as real business data.
+- Browser sign-in is handled by Camel Accounts. Desktop uses a device-local workspace identity. Simamia stores its own business profile in either case.
+- The standalone Go API validates Camel Accounts access tokens and scopes stored records to the token subject. The embedded desktop handler is local to the Wails process and uses the local workspace owner.
+- The API persists businesses, orders, customers, services, team records, and expenses in SQLite. Its server default database is `api/data/simamia.db`; the desktop database is stored under the OS user's configuration directory.
+- Some browser dashboard data can fall back to fabricated browser-local demo records when the API is unavailable. Do not treat those demo values as real business data.
 - Payment records are operational ledger entries derived from work records. Simamia does not process a mobile-money transaction or issue a TRA fiscal receipt.
 - SMS, email, AI, and payment-provider connections are not fully implemented. Read [`docs/integrations.md`](docs/integrations.md) for current status and provider notes.
 - SQLite is intended for a single API instance. Production still needs tested backups, shared-business roles, and operational monitoring before scaling out.
@@ -46,21 +46,21 @@ Templates currently tailor labels, statuses, intake fields, and example services
 ## Requirements
 
 - Bun 1.x (recommended) or a compatible Node.js/npm installation for the Next.js app and landing page
-- Go 1.26 or the version declared by `api/go.mod` for local API development
+- Go 1.26 or the version declared by `api/go.mod` for API and desktop development
 - Docker Engine and the Compose plugin for the production-like stack
-- Rust 1.90+ and a C toolchain for native desktop builds (Tauri and SQLite sidecar)
+- A C toolchain for SQLite; Wails v2 and GTK 3/WebKitGTK 4.1 on Linux, WebView2 on Windows, and Xcode command-line tools on macOS for native desktop builds
 
 ## Distribution editions
 
 The same Next.js interface is used in three ways; desktop packaging does not replace or restyle the browser app:
 
-- **Desktop:** Tauri bundles the static frontend with the Go/SQLite API as a sidecar for Windows, macOS, and Linux. The API listens on loopback and stores its database in the operating system's per-user application-data directory.
+- **Desktop:** Wails embeds the same static frontend and serves the Go API in-process for Windows, macOS, and Linux. The local workspace is stored in SQLite under the operating system's per-user configuration directory and is usable without internet access.
 - **Browser/static hosting:** `bun run build` exports the browser app to `out/`, which can be hosted by any static web server. Set the public Camel Accounts and API URL values at build time.
 - **Self-hosted Docker:** `docker compose up --build` serves the static app and API with the existing production-style stack.
 
-Desktop sign-in still uses Camel Accounts. Before publishing installers, configure a public OAuth client whose allowed redirect URIs include `tauri://localhost/auth/callback/` and `http://tauri.localhost/auth/callback/`; local development also uses `http://localhost:3000/auth/callback/`. Set `NEXT_PUBLIC_CAMEL_ACCOUNTS_URL` and `NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID` in the release workflow variables if they differ from the current defaults. Authentication therefore still requires network access.
+The desktop app opens the same dashboard and onboarding screens directly into a device-local workspace; it does not require Camel Accounts to start or edit local records. Browser and Docker editions retain Camel Accounts sign-in and existing shared API behavior. Desktop records do not sync with browser accounts or other devices. Remote account management, Google sign-in, and future SMS, email, AI-provider, or mobile-money integrations still require connectivity and are not part of offline operation. Local desktop data relies on the operating-system user account and is not protected by an extra Simamia password or a separate encryption layer.
 
-For desktop development, install the root dependencies and run `bun run desktop:dev`. For a native installer on the current machine, run `bun run desktop:build`. The release workflow builds Windows x64, Linux x64, and macOS Intel/Apple Silicon installers when a `v*` tag is pushed. Unsigned macOS and Windows builds may show platform security warnings; configure platform signing before broad distribution.
+For desktop development, install the root dependencies and Wails v2, then run `bun run desktop:dev`. For a native build on the current machine, run `bun run desktop:build`. The release workflow builds Windows x64, Linux x64, and a universal Intel/Apple Silicon macOS app when a `v*` tag is pushed. Unsigned Windows and macOS builds may show platform security warnings; configure platform signing before broad distribution.
 
 ## Local development
 
@@ -88,7 +88,7 @@ Run each service in its own terminal.
 
 ```bash
 cd api
-go run .
+go run ./cmd/simamia-api
 ```
 
 **2. App** — configure the public Camel Accounts client and local API URL at build/dev time:
@@ -102,14 +102,23 @@ bun run dev
 
 Open `http://localhost:3000`. For sign-in to complete, the Camel Accounts client must allow the app's callback URL for the local origin. See [`docs/deployment.md`](docs/deployment.md) for the production client settings.
 
-**3. Public landing page** — runs at `http://localhost:4173`:
+**3. Wails desktop app** — install Wails v2 once, then run:
+
+```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+bun run desktop:dev
+```
+
+The desktop command exports the same UI with desktop-local settings and embeds it in Wails; the Go handler stores local business records in SQLite without calling Camel Accounts.
+
+**4. Public landing page** — runs at `http://localhost:4173`:
 
 ```bash
 cd landing
 bun run dev
 ```
 
-**4. Admin console** — configure a local operator password and matching API key for the API and admin server, then open `http://localhost:3001` from the admin workspace:
+**5. Admin console** — configure a local operator password and matching API key for the API and admin server, then open `http://localhost:3001` from the admin workspace:
 
 ```bash
 SIMAMIA_API_URL=http://localhost:8080/api/v1 \

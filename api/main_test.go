@@ -1,9 +1,10 @@
-package main
+package api
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -104,5 +105,49 @@ func TestPaymentLedgerIsDerivedAndReadOnly(t *testing.T) {
 	rec, p = call(t, a, http.MethodPost, "/api/v1/payments", `{}`)
 	if rec.Code != http.StatusMethodNotAllowed || p["error"].(map[string]any)["code"] != "METHOD_NOT_ALLOWED" {
 		t.Fatalf("expected 405: %d %#v", rec.Code, p)
+	}
+}
+
+func TestDesktopHTTPHandlerPersistsRecordsWithoutOnlineIdentity(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "simamia.db")
+	handler, closeStore, err := NewDesktopHTTPHandler(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/customers", strings.NewReader(`{"name":"Offline customer","phone":"+255 700 000 099"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("offline create status=%d body=%s", response.Code, response.Body.String())
+	}
+	if err := closeStore(); err != nil {
+		t.Fatal(err)
+	}
+
+	handler, closeStore, err = NewDesktopHTTPHandler(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeStore()
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/customers?q=Offline+customer", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Offline customer") {
+		t.Fatalf("offline record was not restored: status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestPersistentServerHandlerStillRequiresCamelToken(t *testing.T) {
+	handler, closeStore, err := NewHTTPHandler(filepath.Join(t.TempDir(), "server.db"), "https://accounts.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeStore()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/orders", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected server handler to require Camel auth, got %d: %s", response.Code, response.Body.String())
 	}
 }

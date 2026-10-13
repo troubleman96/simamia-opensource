@@ -9,24 +9,23 @@ permissions:
   contents: write
 
 jobs:
-  publish-tauri:
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-    runs-on: ${{ matrix.platform }}
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            artifact: simamia-linux-amd64
+          - runner: windows-latest
+            platform: windows/amd64
+            artifact: simamia-windows-amd64
+          - runner: macos-latest
+            platform: darwin/universal
+            artifact: simamia-macos-universal
+    runs-on: ${{ matrix.runner }}
     env:
-      NEXT_PUBLIC_CAMEL_ACCOUNTS_URL: ${{ vars.NEXT_PUBLIC_CAMEL_ACCOUNTS_URL || 'https://accounts.camelcreatives.com' }}
-      NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID: ${{ vars.NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID || 'simamia-35sj96' }}
-      NEXT_PUBLIC_SIMAMIA_API_URL: http://127.0.0.1:8080/api/v1
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
 
@@ -36,17 +35,16 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: api/go.mod
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            desktop/go.sum
+            api/go.sum
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Install Linux desktop dependencies
+      - name: Install Linux Wails dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils file
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install Windows C compiler for SQLite
         if: runner.os == 'Windows'
@@ -61,23 +59,56 @@ jobs:
         shell: pwsh
         run: '"C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
 
+      - name: Install Wails CLI
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        shell: bash
+
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build API sidecar
-        run: node scripts/desktop.mjs build-api --target ${{ matrix.target }}
+      - name: Build Wails desktop app
+        run: node scripts/desktop.mjs build --platform ${{ matrix.platform }}
 
-      - name: Build and draft GitHub release
-        uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package Linux app
+        if: runner.os == 'Linux'
+        run: tar -czf ${{ matrix.artifact }}.tar.gz -C desktop/build/bin simamia-desktop
+
+      - name: Package Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path desktop/build/bin/simamia-desktop.exe -DestinationPath ${{ matrix.artifact }}.zip
+
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: |
+          APP_PATH="$(find desktop/build/bin -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "${{ matrix.artifact }}.zip"
+
+      - uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Simamia ${{ github.ref_name }}
-          releaseBody: |
-            Install the Simamia desktop app for your platform. The desktop app keeps the existing Simamia interface and stores local data in your user application-data directory.
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.*
+          if-no-files-found: error
+          retention-days: 7
 
-            Desktop sign-in requires the Camel Accounts OAuth client to allow the Tauri callback URLs documented in the repository README.
-          releaseDraft: true
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Simamia ${{ github.ref_name }}
+          draft: true
           prerelease: false
-          args: --target ${{ matrix.target }}
+          files: release-artifacts/*
+          body: |
+            Simamia desktop builds use Wails and the same Next.js interface as the browser app. Desktop records are stored locally in SQLite and work offline; they do not sync with Camel Accounts or other devices. Browser and Docker distributions remain unchanged.

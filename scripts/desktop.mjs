@@ -1,78 +1,86 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
 const root = process.cwd();
+const desktopDir = path.join(root, 'desktop');
 const [command, ...rawArgs] = process.argv.slice(2);
 const args = [...rawArgs];
-let target;
+let platform;
 
 for (let i = 0; i < args.length; i += 1) {
-  if (args[i] === '--target') {
-    target = args[i + 1];
+  if (args[i] === '--platform' || args[i] === '--target') {
+    platform = args[i + 1];
     args.splice(i, 2);
     break;
   }
 }
 
-function hostTarget() {
-  return execFileSync('rustc', ['--print', 'host-tuple'], { encoding: 'utf8' }).trim();
-}
+const legacyTargets = {
+  'x86_64-unknown-linux-gnu': 'linux/amd64',
+  'aarch64-unknown-linux-gnu': 'linux/arm64',
+  'x86_64-pc-windows-msvc': 'windows/amd64',
+  'aarch64-pc-windows-msvc': 'windows/arm64',
+  'x86_64-apple-darwin': 'darwin/amd64',
+  'aarch64-apple-darwin': 'darwin/arm64'
+};
+platform = legacyTargets[platform] || platform;
 
-function goTarget(targetTriple) {
-  if (targetTriple.endsWith('-apple-darwin')) {
-    return { goos: 'darwin', goarch: targetTriple.startsWith('aarch64-') ? 'arm64' : 'amd64' };
-  }
-  if (targetTriple.endsWith('-pc-windows-msvc')) {
-    return { goos: 'windows', goarch: targetTriple.startsWith('aarch64-') ? 'arm64' : 'amd64' };
-  }
-  if (targetTriple.endsWith('-unknown-linux-gnu')) {
-    return { goos: 'linux', goarch: targetTriple.startsWith('aarch64-') ? 'arm64' : 'amd64' };
-  }
-  throw new Error(`Unsupported desktop target triple: ${targetTriple}`);
-}
-
-function buildApi(targetTriple) {
-  const { goos, goarch } = goTarget(targetTriple);
-  const extension = goos === 'windows' ? '.exe' : '';
-  const output = path.join(root, 'src-tauri', 'binaries', `simamia-api-${targetTriple}${extension}`);
-  fs.mkdirSync(path.dirname(output), { recursive: true });
-  const result = spawnSync(
-    'go',
-    ['build', '-trimpath', '-ldflags=-s -w', '-o', output, '.'],
-    {
-      cwd: path.join(root, 'api'),
-      stdio: 'inherit',
-      env: { ...process.env, CGO_ENABLED: '1', GOOS: goos, GOARCH: goarch }
-    }
-  );
+function run(file, commandArgs, cwd, env = process.env) {
+  const result = spawnSync(file, commandArgs, {
+    cwd,
+    stdio: 'inherit',
+    env,
+    shell: process.platform === 'win32'
+  });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
-  if (goos !== 'windows') fs.chmodSync(output, 0o755);
-  console.log(`Built Go API sidecar: ${path.relative(root, output)}`);
 }
 
-if (!['dev', 'build', 'build-api'].includes(command)) {
-  console.error('Usage: node scripts/desktop.mjs <dev|build|build-api> [--target <Rust target triple>]');
+function prepareFrontend() {
+  const next = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'next.cmd' : 'next');
+  if (!fs.existsSync(next)) {
+    throw new Error('Next.js is not installed. Install dependencies with `bun install` first.');
+  }
+  const env = {
+    ...process.env,
+    NEXT_PUBLIC_SIMAMIA_DESKTOP: 'true',
+    NEXT_PUBLIC_SIMAMIA_API_URL: '/api/v1',
+    NEXT_PUBLIC_SENTRY_DISABLED: 'true'
+  };
+  run(next, ['build'], root, env);
+
+  const builtExport = path.join(root, 'out');
+  const embeddedExport = path.join(desktopDir, 'frontend', 'out');
+  if (!fs.existsSync(path.join(builtExport, 'index.html'))) {
+    throw new Error('Next.js did not produce out/index.html; the Wails app cannot embed the UI.');
+  }
+  fs.rmSync(embeddedExport, { recursive: true, force: true });
+  fs.cpSync(builtExport, embeddedExport, { recursive: true });
+}
+
+function runWails() {
+  const wailsArgs = [command, ...(platform ? ['-platform', platform] : []), ...args];
+  const cli = process.env.WAILS_CLI || (process.platform === 'win32' ? 'wails.exe' : 'wails');
+  const result = spawnSync(cli, wailsArgs, {
+    cwd: desktopDir,
+    stdio: 'inherit',
+    env: process.env,
+    shell: process.platform === 'win32'
+  });
+  if (result.error?.code === 'ENOENT') {
+    run('go', ['run', 'github.com/wailsapp/wails/v2/cmd/wails@v2.16.0', ...wailsArgs], desktopDir);
+    return;
+  }
+  if (result.error) throw result.error;
+  process.exit(result.status ?? 1);
+}
+
+if (!['dev', 'build'].includes(command)) {
+  console.error('Usage: node scripts/desktop.mjs <dev|build> [--platform <linux/amd64|windows/amd64|darwin/universal>] [Wails flags]');
   process.exit(2);
 }
 
-const targetTriple = target || hostTarget();
-buildApi(targetTriple);
-if (command === 'build-api') process.exit(0);
-
-const cli = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'tauri.cmd' : 'tauri');
-if (!fs.existsSync(cli)) {
-  console.error('Tauri CLI is missing. Run `bun install` first.');
-  process.exit(1);
-}
-const tauriArgs = [command, ...(target ? ['--target', target] : []), ...args];
-const result = spawnSync(cli, tauriArgs, {
-  cwd: root,
-  stdio: 'inherit',
-  shell: process.platform === 'win32',
-  env: process.env
-});
-if (result.error) throw result.error;
-process.exit(result.status ?? 1);
+prepareFrontend();
+runWails();
