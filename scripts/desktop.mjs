@@ -39,7 +39,7 @@ function run(file, commandArgs, cwd, env = process.env) {
 }
 
 function prepareFrontend() {
-  const next = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'next.cmd' : 'next');
+  const next = path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next');
   if (!fs.existsSync(next)) {
     throw new Error('Next.js is not installed. Install dependencies with `bun install` first.');
   }
@@ -49,7 +49,14 @@ function prepareFrontend() {
     NEXT_PUBLIC_SIMAMIA_API_URL: '/api/v1',
     NEXT_PUBLIC_SENTRY_DISABLED: 'true'
   };
-  run(next, ['build'], root, env);
+
+  const result = spawnSync(process.execPath, [next, 'build'], {
+    cwd: root,
+    stdio: 'inherit',
+    env
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exit(result.status ?? 1);
 
   const builtExport = path.join(root, 'out');
   const embeddedExport = path.join(desktopDir, 'frontend', 'out');
