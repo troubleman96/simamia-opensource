@@ -47,7 +47,7 @@ The app's eight templates choose labels, states, and intake details during onboa
 
 ## Database isolation and demo seed
 
-Production API rows are filtered by the authenticated account's Camel Accounts subject. A new empty SQLite database receives sample rows owned by the reserved subject `local-preview`; a normal signed-in user does not see those sample rows. The production database must be backed up and restored as one unit, and this SQLite setup supports a single API instance only.
+Production API rows are filtered by the authenticated account's local ID. A new empty SQLite database receives sample rows owned by the reserved subject `local-preview`; a normal signed-in user does not see those sample rows. The production database must be backed up and restored as one unit, and this SQLite setup supports a single API instance only.
 
 At startup, all records are loaded from SQLite into in-memory slices. List, item lookup, search, and ownership filtering run against those slices; the SQL table is the durable store, not a query engine used for each read. Search scans each record's serialized JSON and has no database index. This is appropriate for a small single-instance MVP, but it limits growth.
 
@@ -61,12 +61,12 @@ Existing legacy rows with no `owner_sub` are not automatically assigned to the c
 sequenceDiagram
   actor UI as Simamia UI / client
   participant API as Go API
-  participant Auth as Camel Accounts
+  participant Auth as Local auth session store
   participant Mem as In-memory records
   participant SQL as SQLite
   UI->>API: Request with bearer access token
-  API->>Auth: Validate token through /oauth/userinfo
-  Auth-->>API: Account subject (sub)
+  API->>Auth: Hash and validate bearer token
+  Auth-->>API: Local account ID (sub)
   API->>Mem: Filter by owner_sub and apply query
   Mem-->>API: Matching record(s)
   API-->>UI: data + meta

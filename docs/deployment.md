@@ -68,10 +68,10 @@ This is a single-server deployment; do not run multiple API replicas against the
 
 ## Local development
 
-Frontend app:
+Frontend app (with the Go API running at `http://localhost:8080`):
 
 ```bash
-NEXT_PUBLIC_CAMEL_ACCOUNTS_URL=https://accounts.camelcreatives.com NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID=simamia-35sj96 NEXT_PUBLIC_SIMAMIA_API_URL=http://localhost:8080/api/v1 bun run dev
+NEXT_PUBLIC_SIMAMIA_API_URL=http://localhost:8080/api/v1 bun run dev
 ```
 
 Landing page:
@@ -95,9 +95,7 @@ cd admin && bun install && bun run dev
 cd docs-site && bun install && bun run dev
 ```
 
-The production public Camel Accounts client is `simamia-35sj96`, with `openid`, `profile`, and `phone` scopes, homepage `https://app.simamia.online`, and redirect URI `https://accounts.camelcreatives.com/widget-callback`. Set this ID through `NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID` before rebuilding the static app.
-
-SQLite currently provides single-server persistence. Production readiness also requires managed backups and restore checks, access roles for shared businesses, monitoring, privacy controls, and live payment/SMS/email provider connections. Payment ledger rows are derived from work records and are not fiscal receipts. See the [management guide](management-guide.md), [provider integration guide](integrations.md), [provider reference notes](provider-research.md), and [OpenAPI spec](../api/openapi.yaml).
+SQLite currently provides single-server persistence. Production readiness also requires managed backups and restore checks, abuse controls for account creation and sign-in, access roles for shared businesses, monitoring, privacy controls, and live payment/SMS/email provider connections. Password reset and account recovery are not implemented. Payment ledger rows are derived from work records and are not fiscal receipts. See the [management guide](management-guide.md), [provider integration guide](integrations.md), [provider reference notes](provider-research.md), and [OpenAPI spec](../api/openapi.yaml).
 
 ## Static preview
 

@@ -59,7 +59,7 @@ The API does not require `paid` to be positive or less than or equal to `amount`
 
 ## Ownership fields
 
-Every persisted API record is assigned an `owner_sub` from the Camel Accounts userinfo response. This exact field is used for list filtering and item authorization. The business profile also gets an `ownerSub` compatibility property because the app reads that spelling during onboarding. Do not treat arbitrary properties named `owner`, `businessId`, or `ownerSub` on other resource types as access-control boundaries.
+Every persisted API record is assigned an `owner_sub` from the local account session. This exact field is used for list filtering and item authorization. The business profile also gets an `ownerSub` compatibility property because the app reads that spelling during onboarding. Do not treat arbitrary properties named `owner`, `businessId`, or `ownerSub` on other resource types as access-control boundaries.
 
 ## Use the OpenAPI file with this distinction in mind
 

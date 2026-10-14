@@ -53,4 +53,4 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Issue or update the TLS certificate through Certbot for the admin hostname after DNS points to this VPS. See the complete [Simamia deployment guide](/operations/deployment), [admin endpoint guide](/api/admin), and [OpenAPI contract](/openapi.yaml).
 
-This console has one shared operator password and one shared actor label. The health page checks API/database connectivity but does not inspect container logs or call Camel Accounts for a live health probe. Camel Accounts identity credentials remain managed separately.
+This console has one shared operator password and one shared actor label. The health page checks API/database connectivity but does not inspect container logs or test customer sign-in. Local account passwords and sessions are not exposed in this console.

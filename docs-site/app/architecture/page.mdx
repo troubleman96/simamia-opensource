@@ -1,13 +1,13 @@
 ---
 title: Architecture
-description: How Simamia authentication, app onboarding, API requests, and storage fit together.
+description: How local Simamia account creation, onboarding, API requests, and storage fit together.
 ---
 
 # Architecture
 
 ## Production services
 
-The production stack has three product services and a reverse proxy. The landing site and app are static web assets in Nginx containers. The Go API is a separate service and persists data in a named SQLite volume. Caddy terminates TLS in the standalone deployment; the existing VPS deployment uses host Nginx and loopback ports instead.
+The production stack has three product services and a reverse proxy. The landing site and app are static web assets in Nginx containers. The Go API persists business records and local account/session data in a named SQLite volume. Caddy terminates TLS in the standalone deployment; the existing VPS deployment uses host Nginx and loopback ports instead.
 
 ```mermaid
 flowchart TB
@@ -17,48 +17,45 @@ flowchart TB
   Landing[Landing website: static HTML/CSS/JS]
   App[Simamia app: Next.js static export]
   API[Go API: /api/v1]
-  Accounts[Camel Accounts: OAuth and userinfo]
-  DB[(SQLite persistent volume)]
+  DB[(SQLite: local accounts, sessions, records)]
   Visitor --> DNS --> Proxy
   Proxy -->|simamia.online| Landing
   Proxy -->|app.simamia.online| App
   Proxy -->|api.simamia.online| API
-  App -->|OAuth sign-in| Accounts
-  App -->|Bearer token + JSON| API
-  API -->|token introspection: /oauth/userinfo| Accounts
-  API -->|scoped records| DB
+  App -->|registration, login, bearer session| API
+  API -->|hash passwords/tokens; scope records| DB
 ```
 
 ## Sign-in and first-use setup
 
-The app uses a public Camel Accounts OAuth client. Phone/password and Google sign-in happen at Camel Accounts. The app receives the authorization result through its callback, then shows Simamia onboarding if the account has no business profile. Onboarding is two steps: choose one of eight business templates, then enter the business name and Tanzania phone number.
+The browser app offers local account creation and sign-in with a Tanzania phone number and password. Registration stores a salted PBKDF2-HMAC-SHA-512 password hash, creates a random bearer session token, and returns the signed-in account. The API stores only a SHA-256 hash of each session token. Once signed in, the app shows business onboarding if the account has no profile. Onboarding has two steps: choose one of eight business templates, then enter the business name and Tanzania phone number.
 
 ```mermaid
 sequenceDiagram
   actor Owner
   participant App as app.simamia.online
-  participant Accounts as Camel Accounts
   participant API as api.simamia.online
   participant DB as SQLite
-  Owner->>App: Open app and choose sign-in method
-  App->>Accounts: OAuth authorization request (PKCE)
-  Accounts-->>App: Redirect with authorization result
-  App->>API: GET /businesses with access token
-  API->>Accounts: GET /oauth/userinfo with bearer token
-  Accounts-->>API: Authenticated account subject
-  API->>DB: Select rows owned by subject
+  Owner->>App: Enter name, Tanzania phone and password
+  App->>API: POST /auth/register
+  API->>DB: Store password hash and local account
+  API->>DB: Store hashed random session token
+  API-->>App: access_token + user
+  App->>API: GET /businesses with bearer session token
+  API->>DB: Validate token and select rows by owner_sub
   DB-->>API: Business profiles
   API-->>App: Existing profile or empty collection
   Owner->>App: Choose template and complete business details
-  App->>API: POST /businesses
-  API->>Accounts: Validate token and resolve subject
-  API->>DB: Store profile with owner_sub
+  App->>API: POST /businesses with bearer session token
+  API->>DB: Store profile with local account owner_sub
   API-->>App: Created profile and generated id
 ```
 
+A normal session lasts 12 hours; selecting “Remember me” creates a 30-day session. `POST /auth/logout` revokes the current token. Password reset and account recovery are not implemented.
+
 ## API request handling
 
-The Go handler sets CORS and security headers, assigns a request ID, answers `/health` without auth, then authenticates every other endpoint. It resolves the token's account subject using Camel Accounts userinfo and filters each data collection by that subject. SQLite writes use one connection and WAL mode.
+The Go handler sets CORS and security headers, assigns a request ID, answers `/health` without account auth, dispatches account registration/login/logout, then validates a local bearer session for protected operations. It filters business records by the session's local account ID. SQLite writes use one connection and WAL mode.
 
 ```mermaid
 flowchart TD
@@ -66,10 +63,13 @@ flowchart TD
   CORS --> RID[Use or generate X-Request-ID]
   RID --> Health{GET /api/v1/health?}
   Health -->|yes| Public[Return public health envelope]
-  Health -->|no| Auth[Call Camel Accounts /oauth/userinfo]
+  Health -->|no| AccountRoute{Local auth route?}
+  AccountRoute -->|register/login| CreateSession[Validate input and issue local session]
+  AccountRoute -->|me| Auth[Validate bearer session]
+  AccountRoute -->|logout| Revoke[Revoke supplied session]
+  AccountRoute -->|business data| Auth
   Auth -->|invalid token| E401[401 UNAUTHORIZED]
-  Auth -->|Accounts unavailable| E503[503 AUTH_UNAVAILABLE]
-  Auth -->|valid subject| Route[Route to supported collection]
+  Auth -->|valid local account ID| Route[Route to supported collection]
   Route --> Read[Read/list: filter owner_sub]
   Route --> Write[Create/update/delete: validate and persist]
   Read --> Envelope[JSON data + meta]
@@ -78,14 +78,15 @@ flowchart TD
 
 ## Tenant boundary today
 
-The storage boundary is the Camel Accounts subject (`owner_sub`). Every stored record belongs to the account that created it; another subject cannot fetch, edit, delete, or list that record. The current model does not yet implement business-level membership: a shared shop with multiple staff accounts needs membership and role support before those accounts can safely share one business workspace.
+The storage boundary is the local account ID stored in `owner_sub`. Every business record belongs to the account that created it; another account cannot fetch, edit, delete, or list that record. The current model does not yet implement business-level membership: a shared shop with multiple staff accounts needs membership and role support before those accounts can safely share one business workspace.
 
 ## Important implementation constraints
 
 - SQLite is single-server storage and API connections are limited to one open connection. Do not run multiple API replicas against the same database file.
-- On a newly initialized empty database, example rows are seeded under `local-preview`; authenticated account requests are scoped to their own subject and will not see those rows.
+- On a newly initialized empty database, example rows are seeded under `local-preview`; registered account requests are scoped to their own ID and will not see those rows.
 - Orders refer to customers and services by display name strings, not enforced foreign keys.
 - Payment ledger rows are calculated from `orders.amount` and `orders.paid` on each request. The ledger is not an independently writable table.
 - Template selection lives in the business profile. The API does not enforce template-specific field schemas or state transitions yet.
+- Account recovery and login rate limiting are not implemented; deployments exposed to the internet should add trusted-proxy abuse controls.
 
 See [data model](/concepts/data-model), [authentication](/concepts/authentication), and [production limits](/operations/limits) for details.

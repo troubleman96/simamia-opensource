@@ -10,11 +10,12 @@ These docs describe the implementation in the current Simamia repository. They a
 ## Persistence and tenancy
 
 - SQLite is a single-server database; use one API process per database file.
-- Records are scoped by Camel Accounts subject. Shared business membership, invitations, staff accounts, roles, and permissions are not implemented.
+- Records are scoped by local account ID. Shared business membership, invitations, staff accounts, roles, and permissions are not implemented.
+- Password reset, account recovery, login throttling, and account administration are not implemented; add abuse controls at a trusted proxy before production use.
 - Record properties are flexible JSON in one table. Cross-resource references are display strings, not foreign keys.
 - At startup, every record is loaded into memory. Lists, ownership checks, item lookup, and search scan those in-memory slices; there is no database-backed pagination or search index. Keep the deployment to one API process and a modest dataset.
 - There is no audit log, soft-delete, record versioning, or idempotency key.
-- `GET /health` does not verify database write readiness or Camel Accounts connectivity.
+- `GET /health` does not verify database write readiness or local account registration/sign-in behavior.
 
 ## Payments and documents
 

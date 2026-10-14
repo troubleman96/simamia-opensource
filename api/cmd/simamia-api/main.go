@@ -42,7 +42,7 @@ func main() {
 			}
 		}
 	}
-	handler, closeStore, err := api.NewHTTPHandler(databasePath, os.Getenv("CAMEL_ACCOUNTS_URL"))
+	handler, closeStore, err := api.NewHTTPHandler(databasePath)
 	if err != nil {
 		slog.Error("startup_failed", "component", "storage", "error", err)
 		os.Exit(1)

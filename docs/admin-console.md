@@ -11,10 +11,10 @@ flowchart LR
   Proxy -->|Private Compose network + X-Simamia-Admin-Key| API[Go API]
   API -->|read / validate / write| SQLite[(SQLite records)]
   API -->|mutation metadata only| Audit[(SQLite admin_audit)]
-  Camel[Camel Accounts] -. identity subject on records .-> API
+  Accounts[Local Simamia accounts] -. owner IDs on records .-> API
 ```
 
-The admin app has a separate operator email and password; it does not use Camel Accounts login and it does not expose the API key to browser code. Configure `SIMAMIA_ADMIN_EMAIL` and `SIMAMIA_ADMIN_PASSWORD` on the server. Camel Accounts remains the authority for user credentials, Google connections, and identity lifecycle. Simamia currently derives tenant accounts from `owner_sub` values present in business records; it has no first-class account/membership table.
+The admin app has a separate operator email and password; it does not use a customer account session and it does not expose the API key to browser code. Configure `SIMAMIA_ADMIN_EMAIL` and `SIMAMIA_ADMIN_PASSWORD` on the server. Simamia currently derives tenants from `owner_sub` values present in business records; the local API stores account hashes and sessions in dedicated tables, but the admin console does not manage them or provide password recovery or a first-class business-membership table.
 
 ## Admin screens
 
@@ -22,7 +22,7 @@ The admin app has a separate operator email and password; it does not use Camel 
 - **Accounts:** searchable owner subjects, business name when a profile is present, and per-resource counts.
 - **Business records:** choose a tenant and resource, search the current records, create, edit, or permanently delete records. The editor supports each resource's flexible JSON payload. Required field and positive amount/price validation matches normal API writes.
 - **Usage:** total records, serialized payload size, creations in the last 30 days, latest update per resource, and admin mutation count. Payload byte counts exclude indexes, WAL files, and backups.
-- **System health:** Go API status, SQLite connectivity, Camel Accounts configuration, admin endpoint configuration, and API uptime. It is a database/process check, not a live probe of Camel Accounts or a log viewer.
+- **System health:** Go API status, SQLite connectivity, local account endpoint status, admin endpoint configuration, and API uptime. It is a database/process check, not a log viewer.
 - **Audit log:** latest admin creates, updates, and deletes, including operator, target tenant, resource, record ID, time, and changed property names. It deliberately excludes property values.
 
 Payments are derived from orders and cannot be edited directly. There is no hard-delete-all-tenant action. Delete records individually, with a browser confirmation. Record deletion is permanent; SQLite backups are the recovery path.
@@ -45,7 +45,7 @@ Never call these endpoints with the admin key from browser JavaScript. The admin
 | GET, POST | `/admin/accounts/{owner_sub}/{resource}` | List or create one tenant's resource records |
 | GET, PATCH, DELETE | `/admin/accounts/{owner_sub}/{resource}/{record_id}` | Read, shallow-merge update, or permanently delete one record |
 | GET | `/admin/usage` | SQLite record counts, payload byte estimates, 30-day creations, and last-updated timestamps |
-| GET | `/admin/health` | API/database health and configured service states; does not probe Camel Accounts |
+| GET | `/admin/health` | API/database health and configured service states |
 | GET | `/admin/audit?page=&page_size=` | Newest administrator mutation events |
 
 `resource` must be one of `businesses`, `customers`, `services`, `orders`, `team`, or `expenses`. `payments` is intentionally not accepted for CRUD because it is a derived view. The API owns `id`, `owner_sub`, and (for business profiles) `ownerSub`: create assigns them, and update ignores attempts to change them. Resource validation runs after merging patches.
@@ -114,6 +114,6 @@ For local development, start the admin Next app on port 3001 from `admin/`. Prov
 - Login and mutation requests enforce the configured exact admin origin. The login process applies an in-memory per-IP retry throttle; restarting the admin container clears this short-lived counter.
 - The API key is a shared machine credential. Audit entries use `SIMAMIA_ADMIN_ACTOR` as a shared actor label, not a distinct operator identity. Do not share the password if attributable individual audit records are required.
 - Admin routes are externally routable on the API host but remain protected by the high-entropy API key; only the admin server should hold it. Keep API and admin containers on the private Compose network.
-- List of accounts is derived only from records, so a Camel Accounts identity with no Simamia record will not appear. This console cannot suspend or edit Camel Accounts users.
+- List of accounts is derived only from records, so a local account with no Simamia business record will not appear. This console cannot inspect passwords or manage user sessions.
 - CRUD uses permanent deletes and existing schema rules. There are no soft-delete, restore, account lock, approval, or data export workflows yet.
 - Audit writes are attempted after a successful record write. If SQLite fails while recording audit metadata, the business mutation remains committed and an `admin_audit_write_failed` server log is emitted; operators should alert on this event.

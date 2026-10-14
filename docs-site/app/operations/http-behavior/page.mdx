@@ -14,6 +14,9 @@ All routes are under `/api/v1`:
 | Route shape | Supported methods |
 | --- | --- |
 | `/api/v1/health` | `GET` |
+| `/api/v1/auth/register`, `/api/v1/auth/login` | `POST` |
+| `/api/v1/auth/me` | `GET` |
+| `/api/v1/auth/logout` | `POST` |
 | `/api/v1/{collection}` for `businesses`, `customers`, `services`, `orders`, `team`, `expenses` | `GET`, `POST` |
 | `/api/v1/{collection}/{id}` for those collections | `GET`, `PATCH`, `DELETE` |
 | `/api/v1/payments` | `GET` |
@@ -21,9 +24,9 @@ All routes are under `/api/v1`:
 
 There is no API root/index route. `PUT`, `HEAD`, and unsupported methods receive `405 METHOD_NOT_ALLOWED`; the response includes an `Allow` header. The value is `GET, POST` for a collection, `GET, PATCH, DELETE` for an item, and `GET` for health or payments.
 
-Method handling depends on the matched route. A `POST` to an item path is not the same as posting to a collection; it receives `405` with that item's supported methods. `GET /api/v1/health` is public, but using another method on `/health` receives `405` without Camel Accounts validation.
+Method handling depends on the matched route. A `POST` to an item path is not the same as posting to a collection; it receives `405` with that item's supported methods. `GET /api/v1/health` is public, but using another method on `/health` receives `405` without account authentication.
 
-For a normal request, the API assigns or echoes a request ID, checks that the path starts with `/api/v1`, answers public health requests, authenticates data requests, then checks the resource and method. Because authentication occurs before resource lookup, a request to an unknown resource without a valid token can receive `401` before an authenticated request to that same path receives `404`.
+For a normal request, the API assigns or echoes a request ID, checks that the path starts with `/api/v1`, answers public health and account registration/login/logout requests, then validates the session for `/auth/me` and business-data requests. Because authentication occurs before resource lookup, a request to an unknown protected resource without a valid token can receive `401` before an authenticated request to that same path receives `404`.
 
 ## CORS and browser preflight
 
@@ -82,9 +85,9 @@ The Go HTTP server is configured with:
 | `WriteTimeout` | 15 seconds | Maximum time to write the response. |
 | `IdleTimeout` | 60 seconds | Keep-alive connection idle limit. |
 
-Token validation separately gives Camel Accounts userinfo a four-second context timeout. SQLite uses a 5-second busy timeout. A request may therefore fail because of the API server deadline, Camel Accounts availability, or a database lock.
+Password verification uses PBKDF2-HMAC-SHA-512. SQLite uses a 5-second busy timeout. A request may fail because of the API server deadline or a database lock.
 
-`GET /health` is a process liveness response. It returns static service/version/timezone/currency values; it does not ping SQLite, check write capability, or call Camel Accounts. The container health check uses this endpoint, so `healthy` means the HTTP process responded, not that every dependency is ready.
+`GET /health` is a process liveness response. It returns static service/version/timezone/currency values; it does not ping SQLite or check write capability. The container health check uses this endpoint, so `healthy` means the HTTP process responded, not that every dependency is ready.
 
 ## Request body parsing
 
@@ -102,9 +105,11 @@ flowchart TD
   ApiPath -->|no| NotFound[404 NOT_FOUND]
   ApiPath -->|yes| Health{GET health?}
   Health -->|yes| HealthResult[200 public health JSON]
-  Health -->|no| Bearer[Validate Camel Accounts bearer token]
+  Health -->|no| AuthRoute{Public local auth route?}
+  AuthRoute -->|register/login| CreateSession[Validate input and issue session]
+  AuthRoute -->|logout| RevokeSession[Revoke supplied session if present]
+  AuthRoute -->|me or business data| Bearer[Validate local account session]
   Bearer -->|invalid| Unauthorized[401 UNAUTHORIZED]
-  Bearer -->|unreachable| Unavailable[503 AUTH_UNAVAILABLE]
   Bearer -->|valid| Match[Match resource and method]
   Match -->|unknown path| NotFound
   Match -->|wrong method| Method[405 METHOD_NOT_ALLOWED + Allow]

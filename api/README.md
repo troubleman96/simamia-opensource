@@ -16,14 +16,17 @@ The API listens on `0.0.0.0:8080` by default. Set `PORT` to change the port. Hea
 curl http://localhost:8080/api/v1/health
 ```
 
-The Wails desktop app uses the same API package through an in-process handler, but opens a per-user SQLite database and assigns the local device workspace without calling Camel Accounts. That handler is mounted only inside Wails and is not exposed as a network server; ordinary API servers continue to require Camel Accounts bearer tokens.
+The Wails desktop app uses the same API package through an in-process handler, but opens a per-user SQLite database and assigns the local device workspace directly. That handler is mounted only inside Wails and is not exposed as a network server; browser users authenticate with local accounts stored by the standalone API.
 
 The default SQLite file is `data/simamia.db` relative to the API process working directory. Override it with `SIMAMIA_DB_PATH=/path/to/simamia.db`. Keep the database outside version control and back it up before upgrades.
 
 ## Authentication and browser access
 
-- Health is public. Business data routes require a Camel Accounts bearer access token.
-- The API validates tokens against `CAMEL_ACCOUNTS_URL` (default `https://accounts.camelcreatives.com`) and scopes records to the token subject.
+- `POST /auth/register` creates a local phone/password account; `POST /auth/login` issues a session token; `GET /auth/me` checks it and `POST /auth/logout` revokes it.
+- Passwords are stored as salted PBKDF2-HMAC-SHA-512 hashes; random bearer tokens are stored only as SHA-256 hashes. Sessions last 12 hours by default or 30 days when `remember_me` is enabled.
+- Health and account registration/login/logout routes are public. Business data routes require a valid local-account bearer token.
+- Business records are scoped to the authenticated local account ID. Duplicate account phone numbers return `409 ACCOUNT_EXISTS`.
+- Browser account creation, login and data requests require the API to be reachable and its CORS allowlist configured.
 - `CORS_ALLOWED_ORIGINS` is a comma-separated exact-origin allowlist. For local development, an unset value permits browser requests from any origin. Production should set it explicitly; the Compose default is `https://app.simamia.online`.
 - The API exposes `X-Request-ID` to browser clients so they can correlate frontend and API logs.
 - Authentication identifies an account, but business membership, staff roles, and shared-business permissions are not implemented yet.
@@ -42,7 +45,7 @@ The admin console is a separate Next.js server at `https://admin.simamia.online`
 
 Admin routes are under `/api/v1/admin`: `GET overview`, `GET health`, `GET accounts`, `GET accounts/{owner_sub}`, tenant-scoped `GET/POST accounts/{owner_sub}/{resource}`, tenant-scoped `GET/PATCH/DELETE accounts/{owner_sub}/{resource}/{record_id}`, `GET usage`, and `GET audit`. Supported resources are businesses, customers, services, orders, team, and expenses. Payments are derived from orders and remain read-only. All mutations use the same resource validation as the business API, assign/protect record IDs and ownership server-side, and append an audit row containing operator, action, target, timestamp, and changed field names (never field values).
 
-The account list is inferred from `owner_sub` values on Simamia business records. It is not a Camel Accounts directory: profile credentials, Google connections, and account lifecycle remain managed by Camel Accounts. The current data model has no first-class membership or account table. See [`../docs/admin-console.md`](../docs/admin-console.md) for operations, environment setup, and endpoint examples.
+The admin account list is inferred from `owner_sub` values on Simamia business records. The API has a local `auth_users` and `auth_sessions` table, but the admin console does not expose passwords, sessions, password resets, or account lifecycle actions. The current data model has no business-membership table. See [`../docs/admin-console.md`](../docs/admin-console.md) for operations, environment setup, and endpoint examples.
 
 ## Run with Docker Compose
 

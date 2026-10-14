@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { fontVariables } from '@/components/themes/font.config';
 import { Toaster } from '@/components/ui/sonner';
 import ThemeProvider from '@/components/themes/theme-provider';
-import { CamelAuthRoot } from '@/features/auth/components/camel-auth-screen';
-import { SimamiaAnalytics } from '@/features/auth/components/camel-analytics';
+import { LocalAuthRoot } from '@/features/auth/components/local-auth';
 import { cn } from '@/lib/utils';
 import '../styles/globals.css';
 
@@ -30,11 +29,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           enableSystem
           disableTransitionOnChange
         >
-          <CamelAuthRoot>
-            <SimamiaAnalytics />
+          <LocalAuthRoot>
             {children}
             <Toaster />
-          </CamelAuthRoot>
+          </LocalAuthRoot>
         </ThemeProvider>
       </body>
     </html>

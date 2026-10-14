@@ -1,12 +1,12 @@
 # Simamia
 
-Simamia is a Swahili-first business operations platform for small service and retail businesses. It combines a public website, a browser app, a Wails desktop app, and a Go API in one repository. Browser users sign in with Camel Accounts; desktop users can work in a local device workspace.
+Simamia is a Swahili-first business operations platform for small service and retail businesses. It combines a public website, a browser app, a Wails desktop app, and a Go API in one repository. Browser users create local Simamia accounts through the Go API; desktop users can work in a local device workspace.
 
 ## Repository map
 
 | Path | Purpose |
 | --- | --- |
-| `src/` | Next.js 16 app: dashboard, Camel Accounts sign-in, business onboarding, and product UI |
+| `src/` | Next.js 16 app: dashboard, local account sign-in and creation, business onboarding, and product UI |
 | `src/features/onboarding/business-templates.ts` | Eight workflow templates and their labels, statuses, intake fields, and sample services |
 | `landing/` | Public `simamia.online` website (plain HTML, CSS, and JavaScript) |
 | `api/` | Go HTTP API, SQLite persistence, and OpenAPI contract |
@@ -34,14 +34,14 @@ Templates currently tailor labels, statuses, intake fields, and example services
 
 ## Current product boundaries
 
-- Browser sign-in is handled by Camel Accounts. Desktop uses a device-local workspace identity. Simamia stores its own business profile in either case.
-- The standalone Go API validates Camel Accounts access tokens and scopes stored records to the token subject. The embedded desktop handler is local to the Wails process and uses the local workspace owner.
+- Browser users create a local phone-and-password account through the Go API. The API stores salted password hashes and hashed session tokens in SQLite, then scopes business records to the account ID. Desktop uses a device-local workspace identity.
+- The embedded desktop handler is local to the Wails process and uses the local workspace owner; it does not require browser account credentials.
 - The API persists businesses, orders, customers, services, team records, and expenses in SQLite. Its server default database is `api/data/simamia.db`; the desktop database is stored under the OS user's configuration directory.
 - Some browser dashboard data can fall back to fabricated browser-local demo records when the API is unavailable. Do not treat those demo values as real business data.
 - Payment records are operational ledger entries derived from work records. Simamia does not process a mobile-money transaction or issue a TRA fiscal receipt.
 - SMS, email, AI, and payment-provider connections are not fully implemented. Read [`docs/integrations.md`](docs/integrations.md) for current status and provider notes.
 - SQLite is intended for a single API instance. Production still needs tested backups, shared-business roles, and operational monitoring before scaling out.
-- The private `admin.simamia.online` console administers Simamia records and tenants inferred from record ownership. It does not administer Camel Accounts credentials or identities; see [`docs/admin-console.md`](docs/admin-console.md).
+- The private `admin.simamia.online` console administers Simamia records and accounts inferred from record ownership. It does not expose customer passwords or sessions; see [`docs/admin-console.md`](docs/admin-console.md).
 
 ## Requirements
 
@@ -55,10 +55,10 @@ Templates currently tailor labels, statuses, intake fields, and example services
 The same Next.js interface is used in three ways; desktop packaging does not replace or restyle the browser app:
 
 - **Desktop:** Wails embeds the same static frontend and serves the Go API in-process for Windows, macOS, and Linux. The local workspace is stored in SQLite under the operating system's per-user configuration directory and is usable without internet access. Download Linux x64, Windows x64, or universal macOS packages from [GitHub Releases](https://github.com/troubleman96/simamia-opensource/releases); see the [desktop installation instructions](docs/desktop-and-web-distribution.md#install-a-prebuilt-desktop-release).
-- **Browser/static hosting:** `bun run build` exports the browser app to `out/`, which can be hosted by any static web server. Set the public Camel Accounts and API URL values at build time.
+- **Browser/static hosting:** `bun run build` exports the browser app to `out/`, which can be hosted by any static web server. Set the public API URL at build time.
 - **Self-hosted Docker:** `docker compose up --build` serves the static app and API with the existing production-style stack.
 
-The desktop app opens the same dashboard and onboarding screens directly into a device-local workspace; it does not require Camel Accounts to start or edit local records. Browser and Docker editions retain Camel Accounts sign-in and existing shared API behavior. Desktop records do not sync with browser accounts or other devices. Remote account management, Google sign-in, and future SMS, email, AI-provider, or mobile-money integrations still require connectivity and are not part of offline operation. Local desktop data relies on the operating-system user account and is not protected by an extra Simamia password or a separate encryption layer.
+The desktop app opens the same dashboard and onboarding screens directly into a device-local workspace; it does not require an online account to start or edit local records. Browser and Docker users create local accounts through the configured Go API. Browser account creation and server-backed data require API connectivity; desktop records do not sync with browser accounts or other devices. Password reset, account recovery, Google sign-in, and future SMS, email, AI-provider, or mobile-money integrations are not currently implemented. Local desktop data relies on the operating-system user account and is not protected by an extra Simamia password or a separate encryption layer.
 
 For desktop development, install the root dependencies and Wails v2, then run `bun run desktop:dev`. For a native build on the current machine, run `bun run desktop:build`. The release workflow builds Windows x64, Linux x64, and a universal Intel/Apple Silicon macOS app when a `v*` tag is pushed. Unsigned Windows and macOS builds may show platform security warnings; configure platform signing before broad distribution.
 
@@ -91,16 +91,14 @@ cd api
 go run ./cmd/simamia-api
 ```
 
-**2. App** — configure the public Camel Accounts client and local API URL at build/dev time:
+**2. App** — configure the local API URL at build/dev time:
 
 ```bash
-NEXT_PUBLIC_CAMEL_ACCOUNTS_URL=https://accounts.camelcreatives.com \
-NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID=simamia-35sj96 \
 NEXT_PUBLIC_SIMAMIA_API_URL=http://localhost:8080/api/v1 \
 bun run dev
 ```
 
-Open `http://localhost:3000`. For sign-in to complete, the Camel Accounts client must allow the app's callback URL for the local origin. See [`docs/deployment.md`](docs/deployment.md) for the production client settings.
+Open `http://localhost:3000` and create a local account. Keep the Go API running while using browser account and data features.
 
 **3. Wails desktop app** — install Wails v2 once, then run:
 
@@ -109,7 +107,7 @@ go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 bun run desktop:dev
 ```
 
-The desktop command exports the same UI with desktop-local settings and embeds it in Wails; the Go handler stores local business records in SQLite without calling Camel Accounts.
+The desktop command exports the same UI with desktop-local settings and embeds it in Wails; the Go handler stores local business records in SQLite without requiring browser account authentication.
 
 **4. Public landing page** — runs at `http://localhost:4173`:
 
@@ -144,7 +142,7 @@ The standalone Compose configuration expects DNS to point to this machine and bi
 ## Environment configuration
 
 - `.env.server.example` lists public app build settings and API runtime settings for Compose. Copy it to `.env` for a server deployment and review every value before building.
-- `env.example.txt` is the original dashboard starter's broader environment reference. Clerk variables there are legacy template settings; Simamia sign-in uses Camel Accounts.
+- `env.example.txt` is the original dashboard starter's broader environment reference; its Clerk entries are legacy template settings and are not used by Simamia.
 - Never commit `.env`, `.env.local`, access tokens, client secrets, or production database files.
 
 ## Build and quality commands

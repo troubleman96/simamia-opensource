@@ -21,7 +21,7 @@ This site explains how to authenticate, create a business profile, manage custom
 
 ## What the API does today
 
-The API is a versioned Go HTTP service backed by SQLite. Camel Accounts access tokens identify the account making a request. Supported collections are businesses, customers, services, orders, team, and expenses. A read-only payments endpoint derives outstanding balances from order amounts and payments recorded on each order.
+The API is a versioned Go HTTP service backed by SQLite. Local phone/password accounts and API-issued bearer sessions identify the account making a request. Supported collections are businesses, customers, services, orders, team, and expenses. A read-only payments endpoint derives outstanding balances from order amounts and payments recorded on each order.
 
 The API does not currently move money, send SMS or email, call AI providers, issue fiscal receipts, or enforce staff roles. See [current limitations](/operations/limits) before designing a production integration.
 
@@ -30,8 +30,8 @@ The API does not currently move money, send SMS or email, call AI providers, iss
 ```mermaid
 flowchart LR
   Client[Web app or integration] -->|HTTPS + Bearer token| API[Simamia Go API]
-  API -->|GET /oauth/userinfo| Accounts[Camel Accounts]
-  Accounts -->|Account subject| API
+  API -->|create account/session or validate token| SQLite[(SQLite)]
+  SQLite -->|Local account ID| API
   API -->|owner_sub filter| SQLite[(SQLite records)]
   SQLite --> API
   API -->|JSON data + meta| Client

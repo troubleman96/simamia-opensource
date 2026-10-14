@@ -154,7 +154,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
         </button>
         {error && <p className='error'>{error}</p>}
         <div className='login-foot'>
-          <Icon name='shield' /> Camel Accounts identity credentials are not used for this console.
+          <Icon name='shield' /> Operator access is separate from customer Simamia accounts.
         </div>
       </form>
     </main>
@@ -591,9 +591,8 @@ function Overview({ data, onNavigate }: { data: Json | null; onNavigate: (page: 
       <div className='info-note'>
         <Icon name='shield' />
         <p>
-          <strong>Account identities come from Camel Accounts.</strong> This console sees owner IDs
-          attached to Simamia records. User profile and credential administration stays in Camel
-          Accounts.
+          <strong>Local accounts are managed by the Simamia API.</strong> This console lists only
+          owner IDs attached to business records; it does not expose account passwords or sessions.
         </p>
       </div>
     </>
@@ -615,9 +614,9 @@ function Health({ data }: { data: Json | null }) {
       icon: 'records'
     },
     {
-      title: 'Camel Accounts',
-      status: data?.camel_accounts ?? 'loading',
-      detail: 'OAuth identity validation configured',
+      title: 'Local accounts',
+      status: data?.local_accounts ?? 'loading',
+      detail: 'API account and session endpoints enabled',
       icon: 'accounts'
     },
     {
@@ -652,8 +651,8 @@ function Health({ data }: { data: Json | null }) {
         <Icon name='health' />
         <p>
           <strong>Health scope:</strong> this page checks the Go API process and SQLite
-          connectivity. It does not query the Camel Accounts provider, inspect container logs, or
-          replace Sentry alerting. Last checked {String(data?.checked_at ?? 'when loaded')}.
+          connectivity. It does not inspect container logs or replace Sentry alerting. Last checked{' '}
+          {String(data?.checked_at ?? 'when loaded')}.
         </p>
       </div>
     </>
@@ -685,7 +684,7 @@ function Accounts({
       <div className='panel-head'>
         <div>
           <h2>Simamia accounts</h2>
-          <p>Each row represents a Camel Accounts subject with Simamia business data.</p>
+          <p>Each row represents a local Simamia account ID with business data.</p>
         </div>
         <div className='search-field'>
           <Icon name='search' />

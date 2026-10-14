@@ -74,12 +74,13 @@ The health endpoint uses a health-shaped `data` object rather than a collection 
 | HTTP | Code | Meaning / client action |
 | --- | --- | --- |
 | `400` | `INVALID_JSON` | Request body could not be decoded as one JSON object. Correct the body and retry. |
-| `401` | `UNAUTHORIZED` | Missing or invalid Camel Accounts bearer token; refresh or sign in again. |
+| `401` | `UNAUTHORIZED` | Missing, invalid, or expired local account session; sign in again. |
+| `409` | `ACCOUNT_EXISTS` | A local account already uses the normalized phone number. |
 | `404` | `NOT_FOUND` | Unknown endpoint/resource or record unavailable to this account. |
 | `405` | `METHOD_NOT_ALLOWED` | Method is not supported; inspect the endpoint method list and `Allow` header. |
 | `422` | `VALIDATION_ERROR` | Required fields or positive amount checks failed. Correct the payload. |
 | `500` | `STORAGE_ERROR` | SQLite could not create, update, or delete the row. Do not blindly repeat writes if you cannot confirm whether a prior operation completed. |
-| `503` | `AUTH_UNAVAILABLE` | Camel Accounts userinfo could not be reached. Retry with backoff. |
+| `503` | `AUTH_UNAVAILABLE` | Local account endpoints require a persistent API database. |
 
 The route checks authentication before looking up protected resources. Therefore an unauthenticated request to a misspelled protected path returns `401`; after successful authentication, the same path returns `404`. `OPTIONS` is separate: it returns `204` without JSON, authentication, or a request ID.
 
@@ -92,5 +93,5 @@ Send an optional `X-Request-ID` header to correlate a request with caller logs. 
 ## Retry guidance
 
 - Safe to retry: health checks, list/item reads, and requests rejected before mutation (such as `400`, `401`, `404`, and `422`).
-- Retry `503` after a short exponential backoff; the unavailable service is Camel Accounts.
+- Retry a temporary `503` after checking API and database availability.
 - For a timeout while creating or updating a record, first list/find by your own business key or check the response/request ID. The API does not yet support idempotency keys.

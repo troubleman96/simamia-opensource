@@ -138,8 +138,8 @@ func TestDesktopHTTPHandlerPersistsRecordsWithoutOnlineIdentity(t *testing.T) {
 	}
 }
 
-func TestPersistentServerHandlerStillRequiresCamelToken(t *testing.T) {
-	handler, closeStore, err := NewHTTPHandler(filepath.Join(t.TempDir(), "server.db"), "https://accounts.example.test")
+func TestPersistentServerHandlerRequiresLocalAccountSession(t *testing.T) {
+	handler, closeStore, err := NewHTTPHandler(filepath.Join(t.TempDir(), "server.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +148,136 @@ func TestPersistentServerHandlerStillRequiresCamelToken(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("expected server handler to require Camel auth, got %d: %s", response.Code, response.Body.String())
+		t.Fatalf("expected server handler to require a local account session, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func callHandler(t *testing.T, handler http.Handler, method, path, body, token string) (*httptest.ResponseRecorder, Record) {
+	t.Helper()
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	var payload Record
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("response is not JSON: %v (%s)", err, response.Body.String())
+	}
+	return response, payload
+}
+
+func authToken(t *testing.T, payload Record) string {
+	t.Helper()
+	data, ok := payload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing response data: %#v", payload)
+	}
+	token, ok := data["access_token"].(string)
+	if !ok || len(token) < 32 {
+		t.Fatalf("missing valid access token: %#v", data)
+	}
+	return token
+}
+
+func TestLocalAccountRegistrationLoginAndSessionPersistence(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "accounts.db")
+	handler, closeStore, err := NewHTTPHandler(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, payload := callHandler(t, handler, http.MethodPost, "/api/v1/auth/register", `{"name":"Asha Mushi","phone":"0712 345 678","password":"local-pass-123","remember_me":true}`, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("registration failed: %d %s", response.Code, response.Body.String())
+	}
+	token := authToken(t, payload)
+	data := payload["data"].(map[string]any)
+	user := data["user"].(map[string]any)
+	if user["name"] != "Asha Mushi" || user["phone_number"] != "+255712345678" {
+		t.Fatalf("unexpected local user: %#v", user)
+	}
+
+	response, _ = callHandler(t, handler, http.MethodGet, "/api/v1/auth/me", "", token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("session validation failed: %d %s", response.Code, response.Body.String())
+	}
+	response, duplicate := callHandler(t, handler, http.MethodPost, "/api/v1/auth/register", `{"name":"Asha Mushi","phone":"+255 712 345 678","password":"local-pass-123"}`, "")
+	if response.Code != http.StatusConflict || duplicate["error"].(map[string]any)["code"] != "ACCOUNT_EXISTS" {
+		t.Fatalf("duplicate phone should conflict: %d %#v", response.Code, duplicate)
+	}
+
+	response, login := callHandler(t, handler, http.MethodPost, "/api/v1/auth/login", `{"phone":"+255712345678","password":"wrong-password"}`, "")
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong password should be rejected, got %d", response.Code)
+	}
+	_ = login
+	response, login = callHandler(t, handler, http.MethodPost, "/api/v1/auth/login", `{"phone":"0712345678","password":"local-pass-123","remember_me":true}`, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("login failed: %d %s", response.Code, response.Body.String())
+	}
+	token = authToken(t, login)
+
+	if err := closeStore(); err != nil {
+		t.Fatal(err)
+	}
+	handler, closeStore, err = NewHTTPHandler(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeStore()
+	response, _ = callHandler(t, handler, http.MethodGet, "/api/v1/auth/me", "", token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("session did not survive API restart: %d %s", response.Code, response.Body.String())
+	}
+	response, _ = callHandler(t, handler, http.MethodPost, "/api/v1/auth/logout", `{}`, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("logout failed: %d %s", response.Code, response.Body.String())
+	}
+	response, _ = callHandler(t, handler, http.MethodGet, "/api/v1/auth/me", "", token)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("logged-out token remained valid: %d", response.Code)
+	}
+}
+
+func TestLocalAccountsCannotReadOtherAccountsRecords(t *testing.T) {
+	handler, closeStore, err := NewHTTPHandler(filepath.Join(t.TempDir(), "isolation.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeStore()
+	_, first := callHandler(t, handler, http.MethodPost, "/api/v1/auth/register", `{"name":"First Owner","phone":"712111111","password":"local-pass-123"}`, "")
+	_, second := callHandler(t, handler, http.MethodPost, "/api/v1/auth/register", `{"name":"Second Owner","phone":"712222222","password":"local-pass-456"}`, "")
+	firstToken, secondToken := authToken(t, first), authToken(t, second)
+
+	response, created := callHandler(t, handler, http.MethodPost, "/api/v1/customers", `{"name":"Private customer","phone":"+255 700 000 010"}`, firstToken)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("could not create owner record: %d %s", response.Code, response.Body.String())
+	}
+	response, firstList := callHandler(t, handler, http.MethodGet, "/api/v1/customers", "", firstToken)
+	if response.Code != http.StatusOK || len(firstList["data"].([]any)) != 1 {
+		t.Fatalf("owner cannot read its own record: %d %#v", response.Code, firstList)
+	}
+	response, secondList := callHandler(t, handler, http.MethodGet, "/api/v1/customers", "", secondToken)
+	if response.Code != http.StatusOK || len(secondList["data"].([]any)) != 0 {
+		t.Fatalf("record was visible to another account: %d %#v %#v", response.Code, secondList, created)
+	}
+}
+
+func TestLocalAccountRegistrationRejectsWeakPasswordsAndBadPhones(t *testing.T) {
+	handler, closeStore, err := NewHTTPHandler(filepath.Join(t.TempDir(), "validation.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeStore()
+	for _, input := range []string{
+		`{"name":"Asha Mushi","phone":"712345678","password":"short"}`,
+		`{"name":"Asha Mushi","phone":"123","password":"local-pass-123"}`,
+	} {
+		response, payload := callHandler(t, handler, http.MethodPost, "/api/v1/auth/register", input, "")
+		if response.Code != http.StatusUnprocessableEntity || payload["error"].(map[string]any)["code"] != "VALIDATION_ERROR" {
+			t.Fatalf("invalid registration was accepted: %d %#v", response.Code, payload)
+		}
 	}
 }

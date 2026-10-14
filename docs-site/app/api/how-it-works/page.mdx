@@ -9,7 +9,7 @@ This page is a reading guide for people who want to understand the API before in
 
 ## The short version
 
-Simamia has a web app and a Go API. The web app signs a user in with Camel Accounts. When the app asks the API for business data, it sends a Camel Accounts **access token**. The API checks that token with Camel Accounts, gets the account's stable subject ID, then reads or changes SQLite records owned by that subject.
+Simamia has a web app and a Go API. A user creates a local Simamia account with a phone number and password. Registration or login returns an API-issued **session token**. When the app asks for business data, it sends that token; the API validates it against its local session table, gets the account ID, then reads or changes SQLite records owned by that account.
 
 An ordinary service workflow uses three kinds of records:
 
@@ -21,9 +21,9 @@ The API also stores a business profile, team directory entries, and expenses. It
 
 ```mermaid
 flowchart LR
-  Person[Owner or app] -->|sign in| Accounts[Camel Accounts]
-  Person -->|HTTPS + access token| API[Simamia Go API]
-  API -->|check token and get subject| Accounts
+  Person[Owner or app] -->|register or sign in| API[Simamia Go API]
+  Person -->|HTTPS + bearer session token| API
+  API -->|validate local session and resolve account ID| DB[(SQLite)]
   API -->|read or write subject-owned JSON records| DB[(SQLite)]
   DB --> API -->|data and request metadata| Person
 ```
@@ -61,21 +61,21 @@ Most calls follow this sequence:
 sequenceDiagram
   actor Client
   participant API as Simamia API
-  participant CA as Camel Accounts
+  participant Auth as Local auth store
   participant DB as SQLite
   Client->>API: GET /orders with Authorization: Bearer token
-  API->>CA: GET /oauth/userinfo with the token
-  CA-->>API: The signed-in account subject (sub)
+  API->>Auth: Hash and look up the session token
+  Auth-->>API: The signed-in local account ID (sub)
   API->>DB: Find orders whose owner_sub equals that subject
   DB-->>API: Matching order records
   API-->>Client: data array and meta pagination/request ID
 ```
 
-`GET /health` is the one public endpoint. Every business-data endpoint needs an access token. If the token is missing or invalid, the API responds with `401 UNAUTHORIZED`. If Camel Accounts cannot be reached, the API responds with `503 AUTH_UNAVAILABLE`.
+`GET /health`, `POST /auth/register`, `POST /auth/login`, and `POST /auth/logout` are public. Business-data endpoints and `GET /auth/me` require a valid session token. If a protected request's token is missing or invalid, the API responds with `401 UNAUTHORIZED`.
 
 ### What “owned by this account” means
 
-Each saved record has an `owner_sub` value taken from Camel Accounts. Lists show only that subject's rows. If you request another account's record ID, the API responds as if it does not exist (`404 NOT_FOUND`).
+Each saved record has an `owner_sub` value taken from the local account session. Lists show only that account's rows. If you request another account's record ID, the API responds as if it does not exist (`404 NOT_FOUND`).
 
 The current ownership boundary is the **signed-in account**, not a business profile. The API does not yet share data with other staff accounts or enforce team roles. Creating two business profiles under one account does not create separate data partitions: the account's customers, orders, team, services, and expenses remain in the same account-owned collections.
 
@@ -118,7 +118,7 @@ The most useful first workflow is to create a customer, a service, then an order
 
 ```bash
 export SIMAMIA_API='http://localhost:8080/api/v1'
-export SIMAMIA_TOKEN='your-Camel-Accounts-access-token'
+export SIMAMIA_TOKEN='your-local-session-token'
 ```
 
 ### Add a customer
@@ -246,7 +246,7 @@ Defaults are page `1` and page size `20`. Invalid values fall back to those defa
 ## 9. Choose the right guide for the next step
 
 - [Getting started](/getting-started): configure your local API and make the first calls.
-- [Authentication](/concepts/authentication): understand Camel Accounts and account ownership.
+- [Authentication](/concepts/authentication): create a local account, manage sessions, and understand record ownership.
 - [Request validation](/concepts/validation): see exactly which values the API checks on create and update.
 - [API reference](/api): the full endpoint list and resource guides.
 - [Swagger UI](/api/swagger): inspect schemas and use “Try it out.”

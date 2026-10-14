@@ -67,17 +67,6 @@ func (a *API) adminHealth(w http.ResponseWriter, r *http.Request, rid string) {
 	if err := a.store.db.PingContext(r.Context()); err != nil {
 		database = "unavailable"
 	}
-	accountsURL := a.accountsURL
-	if accountsURL == "" {
-		accountsURL = os.Getenv("CAMEL_ACCOUNTS_URL")
-	}
-	if accountsURL == "" {
-		accountsURL = "https://accounts.camelcreatives.com"
-	}
-	accountsState := "configured"
-	if strings.TrimSpace(accountsURL) == "" {
-		accountsState = "not_configured"
-	}
 	status := "healthy"
 	if database != "healthy" {
 		status = "degraded"
@@ -86,7 +75,7 @@ func (a *API) adminHealth(w http.ResponseWriter, r *http.Request, rid string) {
 	if !a.startedAt.IsZero() {
 		uptime = int64(time.Since(a.startedAt).Seconds())
 	}
-	a.write(w, http.StatusOK, Record{"status": status, "database": database, "camel_accounts": accountsState, "admin_api": "enabled", "uptime_seconds": uptime, "checked_at": time.Now().UTC().Format(time.RFC3339)}, rid, nil)
+	a.write(w, http.StatusOK, Record{"status": status, "database": database, "local_accounts": "enabled", "admin_api": "enabled", "uptime_seconds": uptime, "checked_at": time.Now().UTC().Format(time.RFC3339)}, rid, nil)
 }
 
 func (a *API) authorizeAdmin(w http.ResponseWriter, r *http.Request, rid string) bool {

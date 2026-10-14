@@ -2,13 +2,13 @@
 
 **Audience:** service-business owners and supervisors in Tanzania
 **Language:** simple Kiswahili by default; English is available in the language switcher
-**Status:** early implementation; workflow templates and Camel Accounts integration are present, with production capabilities still in progress
+**Status:** early implementation; local phone/password accounts and workflow templates are present, with production capabilities still in progress
 
 ## 1. What this MVP is for
 
 Simamia is a service-operations workspace for small teams that take requests, schedule work, assign staff, collect payments and keep customers informed. It is intentionally service-agnostic: examples include laundry, cleaning, repairs, maintenance, salons and other appointment/job-based businesses.
 
-The app currently includes **orders/jobs, customers, services, schedule, team, payments, debts, expenses, invoices, reports, message drafts, an assistant page, integrations, API reference and settings**. Camel Accounts handles phone/password sign-in; new users then create a business profile and choose one of eight workflow templates. The templates configure labels, statuses and intake fields. The authenticated Go API scopes records to the Camel subject, but does not yet implement shared business memberships or staff permissions. Provider screens remain unconnected.
+The app currently includes **orders/jobs, customers, services, schedule, team, payments, debts, expenses, invoices, reports, message drafts, an assistant page, integrations, API reference and settings**. Users create local Simamia accounts with a phone number and password, then create a business profile and choose one of eight workflow templates. The templates configure labels, statuses and intake fields. The authenticated Go API scopes records to the local account ID, but does not yet implement shared business memberships or staff permissions. Provider screens remain unconnected.
 
 ## 2. Everyday workflow
 
@@ -37,7 +37,7 @@ The app currently includes **orders/jobs, customers, services, schedule, team, p
 | Cashier / finance | Payments, balances and approved receipt workflow; not unrestricted customer exports |
 | Support / auditor | Narrowly scoped, time-bound, logged read access |
 
-Camel Accounts authenticates users and the API scopes data to each authenticated subject. Business membership, staff roles, audit history and production-grade storage are still missing; avoid production data until those controls and the deployment have been reviewed.
+The API authenticates local accounts and scopes data to each account ID. Password reset and recovery are not implemented. Business membership, staff roles, audit history and production-grade storage are still missing; avoid production data until those controls and the deployment have been reviewed.
 
 ## 5. Screen-by-screen controls
 
@@ -60,9 +60,9 @@ Camel Accounts authenticates users and the API scopes data to each authenticated
 
 ## 6. Preview data and reliability
 
-The browser frontend requires Camel Accounts sign-in. The dashboard calls the Go API when available and falls back to browser-local demo data if the API cannot be reached. The Wails desktop build opens a device-local workspace and persists records to its per-user SQLite database without Camel Accounts. Desktop data is not shared with the browser or other devices and should be backed up separately.
+The browser frontend requires an account served by the Go API for sign-in and persistent records. The dashboard can fall back to browser-local demo data if the API cannot be reached. The Wails desktop build opens a device-local workspace and persists records to its per-user SQLite database without browser sign-in. Desktop data is not shared with the browser or other devices and should be backed up separately.
 
-The standalone Go API in `api/` validates bearer tokens through Camel Accounts userinfo and scopes records by account subject. Run it using `cd api && go run ./cmd/simamia-api`; SQLite data persists across restarts. Configure `CAMEL_ACCOUNTS_URL` for the API and `NEXT_PUBLIC_SIMAMIA_API_URL` for the frontend. The Wails-only handler runs in-process and is not exposed as an unauthenticated network service. Expenses are separate records; order payment amounts remain aggregates, not an immutable payment event ledger. The API has no business membership model, staff roles, backups, rate limit, payment gateway or message delivery. Apply the Simamia OAuth client migration in Camel Accounts before account signup is enabled.
+The standalone Go API in `api/` creates local accounts, hashes passwords and session tokens, and scopes records by account ID. Run it using `cd api && go run ./cmd/simamia-api`; SQLite data persists across restarts. Configure `NEXT_PUBLIC_SIMAMIA_API_URL` for the frontend and `CORS_ALLOWED_ORIGINS` for trusted browser origins. The Wails-only handler runs in-process and is not exposed as an unauthenticated network service. Expenses are separate records; order payment amounts remain aggregates, not an immutable payment event ledger. The API has no business membership model, staff roles, production abuse throttling, backups, payment gateway or message delivery. Password recovery is not yet implemented.
 
 ## 7. Production readiness checklist
 

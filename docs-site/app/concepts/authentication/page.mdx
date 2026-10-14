@@ -1,57 +1,52 @@
 ---
-title: Authentication
-description: Use Camel Accounts OAuth access tokens to call protected Simamia endpoints.
+title: Local account authentication
+description: Create a Simamia account and use its API-issued bearer session for protected endpoints.
 ---
 
-# Authentication
+# Local account authentication
 
-## Token issuer
+The open-source browser edition uses accounts stored by the Simamia Go API. People create an account with a name, Tanzania phone number, and password; there is no external identity-provider account or OAuth callback.
 
-Simamia uses Camel Accounts as its identity provider. The production issuer is `https://accounts.camelcreatives.com`. The app obtains an OAuth access token with its public client and sends that token to the API as a bearer credential.
+## Create an account
+
+Send a `POST` request to `/auth/register`:
 
 ```http
-Authorization: Bearer <access-token>
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{"name":"Asha Mushi","phone":"+255 712 345 678","password":"choose-a-password","remember_me":true}
 ```
 
-The API does not accept a phone number, password, Google ID token, or browser cookie as a substitute. Obtain tokens through the supported Camel Accounts sign-in flow; do not implement password collection in an API integration.
+The API normalizes the phone to `+255` plus nine local digits, requires a name and a password of at least eight characters, then stores a salted PBKDF2 password hash in SQLite. Phone numbers must be unique. Successful registration creates a session and returns the account plus a random bearer token in `data.access_token`.
 
-## What the API validates
+Use `POST /auth/login` with `phone`, `password`, and optional `remember_me` to sign in again. `remember_me: true` creates a 30-day session; otherwise the session expires after 12 hours. `POST /auth/logout` revokes the supplied session token. `GET /auth/me` returns the account for a valid session.
 
-For each protected request, the Go API:
+## Call protected endpoints
 
-1. Requires the `Authorization: Bearer ...` header.
-2. Sends the token to `{CAMEL_ACCOUNTS_URL}/oauth/userinfo`.
-3. Extracts the authenticated `sub` claim (including the supported `data.sub` response shape).
-4. Uses that subject as the owner scope for the request.
+Send the returned token in the standard bearer header:
 
-The userinfo request has a four-second timeout. The API does not locally validate a JWT signature; Camel Accounts is authoritative for token validity.
+```http
+Authorization: Bearer <local-session-token>
+```
+
+The API hashes session tokens before storing them, validates them locally, and uses the account's stable ID as `owner_sub` on its business records. It does not accept a phone number or password in place of a token.
 
 ## Status behavior
 
 | Condition | Response |
 | --- | --- |
-| Missing, malformed, invalid, or expired bearer token | `401 UNAUTHORIZED` |
-| Camel Accounts cannot be reached before timeout | `503 AUTH_UNAVAILABLE` |
-| Userinfo response is missing an account subject | `401 UNAUTHORIZED` |
-| Valid token | Continue with records scoped to that account subject |
-
-Do not automatically retry `401` with the same token. Refresh or reauthenticate through Camel Accounts. A bounded retry may be appropriate for a temporary `503`.
+| Missing, invalid, or expired session on a protected endpoint | `401 UNAUTHORIZED` |
+| Duplicate phone during registration | `409 ACCOUNT_EXISTS` |
+| Invalid registration fields | `422 VALIDATION_ERROR` |
+| Local account endpoints used with the in-memory preview store | `503 AUTH_UNAVAILABLE` |
 
 ## Account isolation
 
-All API resources use `owner_sub` as their ownership boundary. List queries exclude other subjects; item reads, patches, and deletes return `404` when the record is absent or owned by a different subject. This avoids revealing whether another account owns a particular ID.
+List requests include only records whose `owner_sub` matches the authenticated local account ID. Reading, updating, or deleting another account's record returns `404`, just as if that ID did not exist. Business membership, invitations, staff roles, and shared-workspace access are not implemented yet.
 
-Business membership and roles are not implemented. A second staff member with a different Camel Accounts subject will not automatically see the owner's records. Do not build team-sharing behavior on top of client-side IDs.
+## Browser CORS and security
 
-## Browser CORS
+The app sends cross-origin API requests from the configured browser origin. Set `CORS_ALLOWED_ORIGINS` to a comma-separated list of exact origins; use HTTPS for network access outside local development. The browser stores its bearer token in local storage when “Remember me” is selected and in session storage otherwise. Do not place tokens in URLs, source control, analytics events, or server logs.
 
-The app uses cross-origin requests from `https://app.simamia.online` to `https://api.simamia.online`. The server reads `CORS_ALLOWED_ORIGINS` as a comma-separated list of exact origins. Configure production with the app origin, including scheme and without a trailing slash. An unset allowlist permits `*` for local development and should not be used as a production configuration.
-
-Preflight requests are answered with allowed methods `GET, POST, PATCH, DELETE, OPTIONS` and headers `Content-Type, Authorization, X-Request-ID`.
-
-## Token safety
-
-- Store tokens only in the trusted client auth SDK's protected browser storage/session strategy.
-- Never include tokens in a URL, analytics event, exception message, or server log.
-- Use HTTPS outside local development.
-- Avoid long-lived copies in scripts and shell history. For interactive examples, pass the token through an environment variable as shown in [getting started](/getting-started).
+The desktop edition remains different by design: Wails opens a per-device SQLite workspace directly and does not require a browser account or network connection. Browser users need the Go API for registration, sign-in, and server-backed business records. Password reset and account recovery flows are not currently implemented.

@@ -30,68 +30,16 @@ type Store struct {
 }
 type API struct {
 	store            *Store
-	accountsURL      string
 	startedAt        time.Time
 	desktopLocalAuth bool
 }
 type ownerSubContextKey struct{}
 
 func (a *API) authenticate(w http.ResponseWriter, r *http.Request, requestID string) (string, bool) {
-	if a.desktopLocalAuth {
+	if a.desktopLocalAuth || a.store.db == nil {
 		return "local-preview", true
 	}
-	if a.store.db == nil {
-		return "local-preview", true
-	}
-	header := r.Header.Get("Authorization")
-	token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	if token == "" || token == header {
-		a.fail(w, r, requestID, http.StatusUnauthorized, "UNAUTHORIZED", "Camel Accounts bearer token required", nil)
-		return "", false
-	}
-	issuer := a.accountsURL
-	if issuer == "" {
-		issuer = os.Getenv("CAMEL_ACCOUNTS_URL")
-	}
-	if issuer == "" {
-		issuer = "https://accounts.camelcreatives.com"
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(issuer, "/")+"/oauth/userinfo", nil)
-	if err != nil {
-		a.fail(w, r, requestID, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid authentication", nil)
-		return "", false
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		a.fail(w, r, requestID, http.StatusServiceUnavailable, "AUTH_UNAVAILABLE", "Camel Accounts could not be reached", nil)
-		return "", false
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		a.fail(w, r, requestID, http.StatusUnauthorized, "UNAUTHORIZED", "Camel Accounts token is invalid or expired", nil)
-		return "", false
-	}
-	var claims struct {
-		Sub  string `json:"sub"`
-		Data struct {
-			Sub string `json:"sub"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&claims); err != nil {
-		a.fail(w, r, requestID, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid Camel Accounts identity response", nil)
-		return "", false
-	}
-	if claims.Sub == "" {
-		claims.Sub = claims.Data.Sub
-	}
-	if claims.Sub == "" {
-		a.fail(w, r, requestID, http.StatusUnauthorized, "UNAUTHORIZED", "Camel Accounts identity is missing", nil)
-		return "", false
-	}
-	return claims.Sub, true
+	return a.sessionUser(w, r, requestID)
 }
 
 func NewStore() *Store {
@@ -152,6 +100,25 @@ func OpenStore(path string) (*Store, error) {
 	)`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize record storage: %w", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS auth_users (
+		sub TEXT PRIMARY KEY,
+		full_name TEXT NOT NULL,
+		phone TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL,
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize local account storage: %w", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS auth_sessions (
+		token_hash TEXT PRIMARY KEY,
+		user_sub TEXT NOT NULL REFERENCES auth_users(sub) ON DELETE CASCADE,
+		expires_at TEXT NOT NULL,
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize local session storage: %w", err)
 	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS admin_audit (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -360,6 +327,10 @@ func (a *API) handleHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.write(w, http.StatusOK, Record{"status": "ok", "service": "simamia-api", "version": "v1", "time_zone": "Africa/Dar_es_Salaam", "currency": "TZS"}, requestID, nil)
+		return
+	}
+	if parts[2] == "auth" {
+		a.authHTTP(w, r, requestID, parts[3:])
 		return
 	}
 	if parts[2] == "admin" {
@@ -716,27 +687,26 @@ func (a *API) methodNotAllowed(w http.ResponseWriter, r *http.Request, rid, allo
 	w.Header().Set("Allow", allow)
 	a.fail(w, r, rid, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Method not allowed", Record{"allow": allow})
 }
-func newHTTPHandler(databasePath, accountsURL string, desktopLocalAuth bool) (http.Handler, func() error, error) {
+func newHTTPHandler(databasePath string, desktopLocalAuth bool) (http.Handler, func() error, error) {
 	store, err := OpenStore(databasePath)
 	if err != nil {
 		return nil, nil, err
 	}
 	service := &API{
 		store:            store,
-		accountsURL:      accountsURL,
 		startedAt:        time.Now(),
 		desktopLocalAuth: desktopLocalAuth,
 	}
 	return service, store.db.Close, nil
 }
 
-// NewHTTPHandler opens the persistent API store and enforces Camel Accounts auth.
-func NewHTTPHandler(databasePath, accountsURL string) (http.Handler, func() error, error) {
-	return newHTTPHandler(databasePath, accountsURL, false)
+// NewHTTPHandler opens the persistent API store and enables local phone/password accounts.
+func NewHTTPHandler(databasePath string) (http.Handler, func() error, error) {
+	return newHTTPHandler(databasePath, false)
 }
 
-// NewDesktopHTTPHandler opens the local desktop store without an online identity provider.
+// NewDesktopHTTPHandler opens the local desktop store with its device-local workspace identity.
 // The returned handler is intended to be mounted only inside the Wails asset server.
 func NewDesktopHTTPHandler(databasePath string) (http.Handler, func() error, error) {
-	return newHTTPHandler(databasePath, "", true)
+	return newHTTPHandler(databasePath, true)
 }

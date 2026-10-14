@@ -30,10 +30,11 @@ All paths below are relative to the base URL. For example, production health is 
 | `expenses` | `GET /expenses` | `POST /expenses` | `GET /expenses/{id}` | `PATCH /expenses/{id}` | `DELETE /expenses/{id}` |
 | `payments` | `GET /payments` | — | — | — | — |
 | health | `GET /health` | — | — | — | — |
+| local account auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` | — | — | — | — |
 
 The private operator surface is documented separately at [Private admin API](/api/admin); those routes use a server-only admin key and are intended for the Simamia admin service.
 
-The six resource collections (`businesses`, `customers`, `services`, `orders`, `team`, `expenses`) each support all five collection and item operations shown above. `payments` is read-only. `GET /health` is public; every other operation requires a Camel Accounts access token.
+The six resource collections (`businesses`, `customers`, `services`, `orders`, `team`, `expenses`) each support all five collection and item operations shown above. `payments` is read-only. `GET /health`, `POST /auth/register`, `POST /auth/login`, and `POST /auth/logout` are public; business-data operations and `GET /auth/me` require a local account session token.
 
 ## Interactive reference and downloadable contract
 
@@ -45,12 +46,12 @@ Open the [Interactive Swagger UI](/api/swagger) to browse every request, schema,
 sequenceDiagram
   actor Client
   participant API as Simamia Go API
-  participant Accounts as Camel Accounts
+  participant Accounts as Local auth database
   participant Store as SQLite record store
   Client->>API: Request with Bearer token and optional X-Request-ID
   API-->>Client: GET /health is public
-  API->>Accounts: GET /oauth/userinfo (4 second timeout)
-  Accounts-->>API: Authenticated subject (sub)
+  API->>Accounts: Validate hashed session token
+  Accounts-->>API: Local account ID (sub)
   API->>Store: Read or mutate records for owner_sub
   Store-->>API: Matching records
   API-->>Client: JSON data/error + request metadata
@@ -91,7 +92,7 @@ Amounts are numeric values intended to be TZS. The API validates that required o
 
 | Header | Required | Description |
 | --- | --- | --- |
-| `Authorization: Bearer <token>` | For all routes except health | Camel Accounts OAuth access token |
+| `Authorization: Bearer <token>` | Business data and `GET /auth/me` | Local session token returned at registration or login |
 | `Accept: application/json` | Recommended | Requests JSON responses |
 | `Content-Type: application/json` | For POST/PATCH | One JSON object, maximum size 1 MiB |
 | `X-Request-ID` | Optional | Caller correlation identifier; generated if omitted |

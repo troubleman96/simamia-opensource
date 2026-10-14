@@ -16,9 +16,9 @@ Download the [OpenAPI YAML](/openapi.yaml) to import into Swagger Editor, Postma
 ## Before using “Try it out”
 
 - Select the production server only when you intend to access production data. `DELETE` is permanent.
-- Paste a Camel Accounts **access token** using the **Authorize** control. The API validates it through Camel Accounts; a phone number, password, Google ID token, or ID token is not an API bearer token.
+- Create a local Simamia account through `POST /auth/register` or sign in with `POST /auth/login`. Paste the returned `access_token` using the **Authorize** control; never use a phone number or password as the bearer token.
 - Requests from a browser must come from an origin allowed by `CORS_ALLOWED_ORIGINS`.
-- `GET /health` is public. Every other documented operation requires a valid bearer access token.
+- `GET /health`, `POST /auth/register`, `POST /auth/login`, and `POST /auth/logout` are public routes. Protected business-data operations and `GET /auth/me` require a valid local session token.
 - `GET /payments` is a computed balance view. It does not collect or verify mobile-money payments.
 - Admin operations in the contract require a private server-side key. Do not use Swagger's browser based Try it out for those production operations; use the authenticated Simamia Admin console.
 

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Icons } from '@/components/icons';
 import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
-import { CamelAuthScreen, useSimamiaAuth } from '@/features/auth/components/camel-auth-screen';
+import { LocalAuthScreen } from '@/features/auth/components/local-auth-screen';
+import { useSimamiaAuth } from '@/features/auth/components/local-auth';
 import {
   BusinessSetup,
   type SimamiaBusinessProfile
@@ -15,6 +16,7 @@ import {
 } from '@/features/onboarding/business-templates';
 import PageContainer from '@/components/layout/page-container';
 import { cn } from '@/lib/utils';
+import { SIMAMIA_API_BASE_URL } from '@/lib/simamia-api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -136,11 +138,6 @@ type FormKind =
   | 'message'
   | null;
 
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_SIMAMIA_API_URL ||
-  process.env.NEXT_PUBLIC_HUDUMADESK_API_URL ||
-  'http://127.0.0.1:8080/api/v1'
-).replace(/\/+$/, '');
 const DESKTOP_LOCAL_MODE = process.env.NEXT_PUBLIC_SIMAMIA_DESKTOP === 'true';
 
 function readWorkspaceCache(kind: 'prefs' | 'demo', accountKey: string): string | null {
@@ -159,7 +156,7 @@ function readWorkspaceCache(kind: 'prefs' | 'demo', accountKey: string): string 
 async function fetchApiRecords<T>(resource: string, accessToken: string | null): Promise<T[]> {
   if (!accessToken) throw new Error('Sign in to load workspace data');
   const response = await loggedFetch(
-    `${API_BASE_URL}/${resource}`,
+    `${SIMAMIA_API_BASE_URL}/${resource}`,
     {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -180,7 +177,7 @@ async function createApiRecord<T>(
 ): Promise<T> {
   if (!accessToken) throw new Error('Sign in to save workspace data');
   const response = await loggedFetch(
-    `${API_BASE_URL}/${resource}`,
+    `${SIMAMIA_API_BASE_URL}/${resource}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -203,7 +200,7 @@ async function updateApiRecord<T>(
 ): Promise<T> {
   if (!accessToken) throw new Error('Sign in to update workspace data');
   const response = await loggedFetch(
-    `${API_BASE_URL}/${resource}/${encodeURIComponent(id)}`,
+    `${SIMAMIA_API_BASE_URL}/${resource}/${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -1399,7 +1396,7 @@ export default function Simamia() {
       </main>
     );
   }
-  if (!authenticated || !user?.sub) return <CamelAuthScreen lang={lang} />;
+  if (!authenticated || !user?.sub) return <LocalAuthScreen lang={lang} />;
   if (!businessProfile || businessProfile.ownerSub !== user.sub) {
     return (
       <BusinessSetup
@@ -1513,7 +1510,7 @@ export default function Simamia() {
             </div>
             <div className='min-w-0 flex-1'>
               <p className='truncate text-sm font-medium'>
-                {user.name || user.phone_number || 'Camel Accounts user'}
+                {user.name || user.phone_number || 'Local account'}
               </p>
               <p className='text-muted-foreground truncate text-xs'>
                 {lang === 'sw' ? 'Msimamizi' : 'Owner'}
@@ -3917,7 +3914,7 @@ function IntegrationsPage({ lang }: { lang: Lang }) {
   );
 }
 function ApiPage({ lang }: { lang: Lang }) {
-  const apiBaseUrl = API_BASE_URL;
+  const apiBaseUrl = SIMAMIA_API_BASE_URL;
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   useEffect(() => {
     let active = true;

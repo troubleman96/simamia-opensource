@@ -10,7 +10,7 @@ The Wails v2 desktop app bundles the static UI and mounts the existing Go API ha
 - Windows: typically `%AppData%\Simamia\simamia.db`
 - macOS: typically `~/Library/Application Support/Simamia/simamia.db`
 
-The desktop build uses a local-only workspace identity and SQLite persistence. The visible dashboard and business onboarding use the same React components and styles as the browser app. The desktop does not authenticate against Camel Accounts and does not synchronize its local records with the web app or other devices. Keep a file-level backup of the SQLite database before moving, reinstalling, or replacing a device.
+The desktop build uses a local-only workspace identity and SQLite persistence. The visible dashboard and business onboarding use the same React components and styles as the browser app. Browser users create local Simamia accounts with the Go API; desktop users continue directly into their device-local workspace and do not synchronize its records with the web app or other devices. Keep a file-level backup of the SQLite database before moving, reinstalling, or replacing a device.
 
 ### Install a prebuilt desktop release
 
@@ -48,7 +48,7 @@ Quit Simamia before replacing it with a newer release. Your SQLite workspace rem
 
 ### Online-only boundaries
 
-Browser and Docker builds continue to use Camel Accounts OAuth and the existing remote API configuration. On desktop, internet-only operations are not needed to open the UI or create, read, update, and delete local business records. Cross-device sync, Camel account registration/recovery, Google sign-in, and future SMS, email, AI-provider, and mobile-money integrations require network connectivity and are not provided by this local workspace. The operational payments screens remain ledger entries, not payment processing. Local desktop records are protected by the OS user account; the app currently has no additional password, encryption, or multi-user access-control layer.
+Browser and Docker builds use local Simamia accounts provided by the configured Go API. On desktop, internet-only operations are not needed to open the UI or create, read, update, and delete local business records. Cross-device sync, password reset, account recovery, and future SMS, email, AI-provider, and mobile-money integrations require network connectivity and are not currently implemented. The operational payments screens remain ledger entries, not payment processing. Local desktop records are protected by the OS user account; the app currently has no additional password, encryption, or multi-user access-control layer.
 
 ### Prerequisites
 
@@ -75,16 +75,14 @@ The `.github/workflows/desktop-release.yml` workflow builds Linux x64, Windows x
 
 ## Static browser build
 
-The existing browser app remains a static export and continues to use the public Camel Accounts client and configured API:
+The browser app remains a static export. Point it at the Go API that handles local account registration, sign-in, sessions, and business records:
 
 ```bash
-NEXT_PUBLIC_CAMEL_ACCOUNTS_URL=https://accounts.camelcreatives.com \
-NEXT_PUBLIC_CAMEL_ACCOUNTS_CLIENT_ID=your-public-client-id \
 NEXT_PUBLIC_SIMAMIA_API_URL=https://your-api.example/api/v1 \
 bun run build
 ```
 
-Serve the generated `out/` directory. The API must be reachable from the browser, validate Camel Accounts tokens, and allow the deployed app's origin in `CORS_ALLOWED_ORIGINS`.
+Serve the generated `out/` directory. The API must be reachable from the browser and allow the deployed app's origin in `CORS_ALLOWED_ORIGINS`.
 
 ## Self-hosted Docker
 

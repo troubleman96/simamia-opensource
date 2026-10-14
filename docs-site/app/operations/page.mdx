@@ -17,7 +17,8 @@ Operational guides for teams running the current Go API.
 
 ## Production checklist
 
-- Set `CAMEL_ACCOUNTS_URL` to the trusted Camel Accounts issuer.
+- Configure the static app's `NEXT_PUBLIC_SIMAMIA_API_URL` to the Go API that issues local account sessions.
+- Use HTTPS and apply trusted-proxy rate limits to account registration and login before exposing the API publicly.
 - Set `CORS_ALLOWED_ORIGINS` to the exact production app origin.
 - Persist `/data/simamia.db` on durable storage and back it up off-server.
 - Terminate TLS at the documented reverse proxy and expose only the proxy to the public network.

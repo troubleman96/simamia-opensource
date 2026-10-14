@@ -164,8 +164,8 @@ export function BusinessSetup({
                   : `Selected type: ${businessTemplates.find((item) => item.id === selected)?.name}`}
                 {' · '}
                 {sw
-                  ? `Akaunti ya mmiliki: ${ownerName || 'Camel Accounts'}`
-                  : `Owner account: ${ownerName || 'Camel Accounts'}`}
+                  ? `Akaunti ya mmiliki: ${ownerName || 'Akaunti ya Simamia'}`
+                  : `Owner account: ${ownerName || 'Simamia account'}`}
               </CardDescription>
             </CardHeader>
             <CardContent className='grid gap-4'>

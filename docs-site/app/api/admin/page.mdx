@@ -7,7 +7,7 @@ description: Tenant, record, usage, system-health, and audit endpoints used by t
 
 The operator console at `https://admin.simamia.online` uses these server-to-server endpoints. This API key is a private machine credential. **Do not enter or embed it in browser JavaScript, public Swagger requests, mobile apps, or customer integrations.** The Admin Next.js server checks its signed operator session and sends `X-Simamia-Admin-Key` over the private Compose network.
 
-The console administers Simamia business data. The API does not provide Camel Accounts credential, Google connection, or identity lifecycle administration. Tenants are inferred from `owner_sub` fields on stored Simamia records; an identity with no business records does not appear here.
+The console administers Simamia business data. It does not expose local account passwords, sessions, or recovery actions. Tenants are inferred from `owner_sub` fields on stored Simamia records; an account with no business records does not appear here.
 
 ## Authentication and setup
 
@@ -62,7 +62,7 @@ curl -X PATCH \
 
 ## What the monitoring endpoints mean
 
-- `/admin/health` pings the SQLite connection and reports API uptime plus whether the Camel Accounts and admin integrations are configured. It does not make an HTTP health call to Camel Accounts, inspect Docker state, or return service logs.
+- `/admin/health` pings the SQLite connection and reports API uptime plus whether local account and admin endpoints are enabled. It does not inspect Docker state or return service logs.
 - `/admin/usage` estimates bytes from serialized JSON payloads only. SQLite indexes, WAL/journal files, backups, and logs are excluded.
 - `/admin/audit` records changes made through protected admin CRUD. It is not a complete audit of all normal user API changes and does not capture sign-in attempts.
 
